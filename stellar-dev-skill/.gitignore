@@ -1,0 +1,29 @@
+# Local AI tool settings
+.claude/
+.cursor/
+.aider/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Build artifacts
+dist/
+build/
+
+# Project-local files
+TOPROMPT.md
+audit/

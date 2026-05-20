@@ -1,16 +1,17 @@
-[package]
-name = "udonfi-contract"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+resolver = "2"
+members = [
+    "common",
+    "lending_pool",
+    "reserve",
+    "a_token",
+    "debt_token",
+    "price_oracle",
+    "liquidation",
+]
 
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
+[workspace.dependencies]
 soroban-sdk = "25.0.1"
-
-[dev-dependencies]
-soroban-sdk = { version = "25.0.1", features = ["testutils"] }
 
 [profile.release]
 opt-level = "z"

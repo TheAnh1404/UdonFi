@@ -1080,8 +1080,9 @@ mod test {
 
         // Create a test token (simulating SAC)
         let admin = Address::generate(&env);
-        let token_admin = StellarAssetClient::new(&env, &env.register_stellar_asset_contract_v2(admin.clone()));
-        let asset = token_admin.address.clone();
+        let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
+        let token_admin = StellarAssetClient::new(&env, &token_contract.address());
+        let asset = token_contract.address();
         let token_client = TokenClient::new(&env, &asset);
 
         // Setup user

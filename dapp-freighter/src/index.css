@@ -1046,12 +1046,15 @@ body::after {
   .nav-tabs {
     width: 100%;
     overflow-x: auto;
+    white-space: nowrap;
+    display: flex;
   }
   .nav-tab {
     flex: 1;
     justify-content: center;
     padding: 8px 12px;
     font-size: 13px;
+    white-space: nowrap;
   }
   .wallet-widget {
     width: 100%;
@@ -1065,3 +1068,42 @@ body::after {
     font-size: 13px;
   }
 }
+
+/* Premium Styles for Interest Charts and Liquidation Views */
+.summary-card.active {
+  box-shadow: 0 0 25px rgba(139, 92, 246, 0.15);
+  animation: cardPulse 2s infinite ease-in-out;
+}
+
+@keyframes cardPulse {
+  0% { border-color: rgba(139, 92, 246, 0.25); }
+  50% { border-color: rgba(139, 92, 246, 0.6); }
+  100% { border-color: rgba(139, 92, 246, 0.25); }
+}
+
+.interest-rate-chart svg {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  padding: 8px;
+}
+
+/* Warning alert panels inside modal and liquidation session views */
+.modal-warning-panel {
+  display: flex;
+  gap: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  line-height: 1.4;
+  align-items: flex-start;
+}
+
+.modal-warning-panel span {
+  font-size: 16px;
+}
+

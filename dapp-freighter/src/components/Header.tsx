@@ -51,6 +51,12 @@ export const Header: React.FC<HeaderProps> = ({
           📊 Dashboard
         </button>
         <button
+          className={`nav-tab ${currentTab === 'markets' ? 'active' : ''}`}
+          onClick={() => setCurrentTab('markets')}
+        >
+          📈 Markets
+        </button>
+        <button
           className={`nav-tab ${currentTab === 'lend' ? 'active' : ''}`}
           onClick={() => setCurrentTab('lend')}
         >
@@ -67,6 +73,12 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => setCurrentTab('portfolio')}
         >
           💼 Portfolio
+        </button>
+        <button
+          className={`nav-tab ${currentTab === 'liquidations' ? 'active' : ''}`}
+          onClick={() => setCurrentTab('liquidations')}
+        >
+          ⚡ Liquidations
         </button>
         <button
           className={`nav-tab ${currentTab === 'faucet' ? 'active' : ''}`}

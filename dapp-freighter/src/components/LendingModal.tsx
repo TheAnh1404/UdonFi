@@ -239,6 +239,22 @@ export const LendingModal: React.FC<LendingModalProps> = ({
                 </span>
               </div>
 
+              {/* Gas estimation */}
+              <div className="modal-info-row">
+                <span className="modal-info-lbl">Phí gas Soroban ước tính</span>
+                <span className="modal-info-val" style={{ color: 'var(--text-muted)', fontWeight: 600 }}>
+                  ⛽ ~0.0084 XLM
+                </span>
+              </div>
+
+              {/* Ledger speed */}
+              <div className="modal-info-row">
+                <span className="modal-info-lbl">Thời gian đóng sổ ledger</span>
+                <span className="modal-info-val" style={{ color: 'var(--text-muted)' }}>
+                  ⚡ ~5.2 giây
+                </span>
+              </div>
+
               {/* Health Factor preview */}
               <div className="modal-info-row">
                 <span className="modal-info-lbl">Chỉ số Sức khỏe (Health Factor)</span>

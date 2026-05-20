@@ -13,6 +13,8 @@ import { BorrowMarketView } from './components/BorrowMarketView';
 import { PortfolioView } from './components/PortfolioView';
 import { FaucetView } from './components/FaucetView';
 import { LendingModal } from './components/LendingModal';
+import { MarketsDetailView } from './components/MarketsDetailView';
+import { LiquidationView } from './components/LiquidationView';
 
 interface NotificationState {
   type: 'info' | 'success' | 'error';
@@ -467,6 +469,10 @@ function App() {
           />
         )}
 
+        {currentTab === 'markets' && (
+          <MarketsDetailView onNavigate={setCurrentTab} />
+        )}
+
         {currentTab === 'lend' && (
           <LendMarketView
             assets={ASSET_MARKETS}
@@ -502,6 +508,13 @@ function App() {
             borrowCapacityUsd={globalMetrics.borrowCapacityUsd}
             healthFactor={globalMetrics.healthFactor}
             netApy={globalMetrics.netApy}
+          />
+        )}
+
+        {currentTab === 'liquidations' && (
+          <LiquidationView
+            connected={connected}
+            connectWallet={connectWallet}
           />
         )}
 

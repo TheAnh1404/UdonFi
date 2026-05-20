@@ -86,8 +86,9 @@ pub fn calculate_linear_interest(rate: i128, time_delta: u64) -> Option<i128> {
     if time_delta == 0 {
         return Some(RAY);
     }
-    let rate_per_second = ray_div(rate, SECONDS_PER_YEAR as i128)?;
-    let accumulated = rate_per_second.checked_mul(time_delta as i128)?;
+    let accumulated = rate
+        .checked_mul(time_delta as i128)?
+        / (SECONDS_PER_YEAR as i128);
     RAY.checked_add(accumulated)
 }
 
@@ -136,7 +137,17 @@ pub fn calculate_utilization_rate(total_deposits: i128, total_borrows: i128) -> 
     if total_deposits == 0 {
         return Some(0);
     }
-    wad_div(total_borrows, total_deposits)
+    let mut borrows = total_borrows;
+    let mut deposits = total_deposits;
+    // Scale down to prevent overflow in wad_div's a * WAD
+    while borrows > i128::MAX / WAD {
+        borrows /= 10;
+        deposits /= 10;
+    }
+    if deposits == 0 {
+        return Some(0);
+    }
+    wad_div(borrows, deposits)
 }
 
 /// Calculate borrow rate using the kinked interest rate model.
@@ -257,8 +268,8 @@ mod tests {
     fn test_linear_interest() {
         // At 10% rate over 1 year
         let rate = WAD * 10 / 100;
-        // Convert to RAY for the function
-        let rate_ray = rate * RAY / WAD;
+        // Convert to RAY for the function (WAD to RAY is multiplying by 10^9)
+        let rate_ray = rate * 1_000_000_000;
         let result = calculate_linear_interest(rate_ray, SECONDS_PER_YEAR).unwrap();
         // Expected: 1.10 in RAY
         let expected = RAY + RAY * 10 / 100;

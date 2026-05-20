@@ -1,4 +1,4 @@
-import React from 'react';
+import { soroban } from '../services/soroban';
 
 interface AssetData {
   id: string;
@@ -30,10 +30,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   netApy,
   healthFactor,
 }) => {
-  // Mock global network statistics (feel premium and real)
-  const globalTotalSupplied = 45892040;
-  const globalTotalBorrowed = 21458900;
-  const globalLiquidity = globalTotalSupplied - globalTotalBorrowed;
+  // Compute global active stats using soroban service
+  const globalStats = soroban.getProtocolGlobalStats();
+  const globalTotalSupplied = globalStats.globalTotalSupplied;
+  const globalTotalBorrowed = globalStats.globalTotalBorrowed;
+  const globalLiquidity = globalStats.globalLiquidity;
 
   return (
     <div className="dashboard-view">

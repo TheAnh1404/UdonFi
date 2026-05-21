@@ -1,13 +1,14 @@
 import React from 'react';
-import { TrendingUp, ShieldAlert } from 'lucide-react';
+import { TrendingUp, ShieldAlert, Wallet } from 'lucide-react';
 import type { Reserve, UserBalances } from '../types/lending';
 
 interface PositionStatsProps {
     reserves: Record<'XLM' | 'USDC', Reserve>;
     userBalances: UserBalances;
+    wallet: { isConnected: boolean; address: string };
 }
 
-export const PositionStats: React.FC<PositionStatsProps> = ({ reserves, userBalances }) => {
+export const PositionStats: React.FC<PositionStatsProps> = ({ reserves, userBalances, wallet }) => {
     // 1. Calculate actual balances (Scaled * Index)
     const xlmSupplied = userBalances.suppliedScaled.XLM * reserves.XLM.liquidityIndex;
     const usdcSupplied = userBalances.suppliedScaled.USDC * reserves.USDC.liquidityIndex;
@@ -96,6 +97,77 @@ export const PositionStats: React.FC<PositionStatsProps> = ({ reserves, userBala
                         </span>
                         <span className="text-xs text-dim">Giới hạn vay: {maxLtvLimit}%</span>
                     </div>
+                </div>
+
+                {/* Wallet Balance Section */}
+                <div className="wallet-balances-box mt-4 mb-4" style={{
+                    background: 'rgba(255, 255, 255, 0.01)',
+                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    borderRadius: '12px',
+                    padding: '1rem',
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                        <Wallet className={wallet?.isConnected ? "text-cyan animate-pulse" : "text-dim"} size={16} />
+                        <span style={{ fontWeight: 600, fontSize: '0.9rem', color: wallet?.isConnected ? 'var(--text-main)' : 'var(--text-dim)' }}>
+                            Số Dư Ví Của Bạn (Liquid Assets)
+                        </span>
+                    </div>
+                    {wallet?.isConnected ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="wallet-asset-pill" style={{
+                                background: 'rgba(255, 255, 255, 0.02)',
+                                border: '1px solid rgba(0, 243, 255, 0.15)',
+                                borderRadius: '8px',
+                                padding: '0.75rem',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <div>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block' }}>Stellar Lumens</span>
+                                    <span style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '1.05rem' }}>
+                                        {userBalances.wallet.XLM.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM
+                                    </span>
+                                </div>
+                                <span className="text-cyan" style={{ fontSize: '0.9rem', fontWeight: 600 }}>
+                                    ${(userBalances.wallet.XLM * reserves.XLM.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                            <div className="wallet-asset-pill" style={{
+                                background: 'rgba(255, 255, 255, 0.02)',
+                                border: '1px solid rgba(168, 85, 247, 0.15)',
+                                borderRadius: '8px',
+                                padding: '0.75rem',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <div>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block' }}>USD Coin</span>
+                                    <span style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '1.05rem' }}>
+                                        {userBalances.wallet.USDC.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+                                    </span>
+                                </div>
+                                <span className="text-purple" style={{ fontSize: '0.9rem', fontWeight: 600 }}>
+                                    ${(userBalances.wallet.USDC * reserves.USDC.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            height: '60px',
+                            background: 'rgba(255, 255, 255, 0.01)',
+                            borderRadius: '8px',
+                            border: '1px dashed rgba(255, 255, 255, 0.08)',
+                            color: 'var(--text-dim)',
+                            fontSize: '0.85rem'
+                        }}>
+                            Vui lòng kết nối ví Freighter để theo dõi tài sản
+                        </div>
+                    )}
                 </div>
 
                 <div className="ltv-footer mt-2">

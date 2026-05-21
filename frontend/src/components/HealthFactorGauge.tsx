@@ -68,16 +68,25 @@ export const HealthFactorGauge: React.FC<HealthFactorGaugeProps> = ({ healthFact
                 </div>
                 <div className="hf-legend">
                     <div className="legend-item">
-                        <span className="color-box bg-green"></span>
-                        <span>&gt; 1.5 An Toàn</span>
+                        <div className="legend-left">
+                            <span className="color-dot bg-green animated-pulse-green"></span>
+                            <span className="legend-range">&gt; 1.5</span>
+                        </div>
+                        <span className="legend-badge green-badge">An Toàn</span>
                     </div>
                     <div className="legend-item">
-                        <span className="color-box bg-yellow"></span>
-                        <span>1.0 - 1.5 Rủi Ro</span>
+                        <div className="legend-left">
+                            <span className="color-dot bg-yellow"></span>
+                            <span className="legend-range">1.0 - 1.5</span>
+                        </div>
+                        <span className="legend-badge yellow-badge">Rủi Ro</span>
                     </div>
                     <div className="legend-item">
-                        <span className="color-box bg-red animated-pulse"></span>
-                        <span>&lt; 1.0 Thanh Lý</span>
+                        <div className="legend-left">
+                            <span className="color-dot bg-red animated-pulse-red"></span>
+                            <span className="legend-range">&lt; 1.0</span>
+                        </div>
+                        <span className="legend-badge red-badge">Thanh Lý</span>
                     </div>
                 </div>
             </div>

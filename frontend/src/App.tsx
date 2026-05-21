@@ -474,10 +474,10 @@ function App() {
                 onDisconnect={handleDisconnectWallet}
             />
 
-            {/* Top row: Health Factor and Position Stats */}
+            {/* Top row: Position Stats and Health Factor */}
             <div className="dashboard-row pos-row">
+                <PositionStats reserves={reserves} userBalances={userBalances} wallet={wallet} />
                 <HealthFactorGauge healthFactor={mainHealthFactor} />
-                <PositionStats reserves={reserves} userBalances={userBalances} />
             </div>
 
             {/* Middle row: Market Table and Interaction Panel */}

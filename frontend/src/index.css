@@ -460,7 +460,12 @@ body {
 }
 
 .pos-row {
-    grid-template-columns: 1fr 2fr;
+    grid-template-columns: 2fr 1fr;
+}
+
+.hf-card {
+    align-self: start;
+    min-height: 420px;
 }
 
 @media (max-width: 900px) {
@@ -473,14 +478,17 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: space-evenly;
     gap: 1.5rem;
+    flex: 1;
+    padding: 1.5rem 1rem;
 }
 
 .gauge-container {
     position: relative;
-    width: 140px;
-    height: 140px;
+    width: 160px;
+    height: 160px;
+    filter: drop-shadow(0 0 15px rgba(0, 243, 255, 0.1));
 }
 
 .radial-gauge {
@@ -491,7 +499,7 @@ body {
 
 .gauge-bg {
     fill: none;
-    stroke: rgba(255, 255, 255, 0.04);
+    stroke: rgba(255, 255, 255, 0.03);
     stroke-width: 8;
 }
 
@@ -517,36 +525,126 @@ body {
 
 .gauge-val {
     font-family: var(--font-heading);
-    font-size: 1.8rem;
-    font-weight: 700;
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
 }
 
 .gauge-label {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     color: var(--text-muted);
-    font-weight: 500;
+    font-weight: 600;
+    margin-top: 0.25rem;
 }
 
 .hf-legend {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 0.6rem;
     width: 100%;
+    max-width: 240px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 0.75rem 1rem;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05), 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
 .legend-item {
-    font-size: 0.8rem;
-    color: var(--text-muted);
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 0.5rem;
+    padding: 0.2rem 0;
+    transition: var(--transition-smooth);
 }
 
-.color-box {
-    width: 12px;
-    height: 12px;
-    border-radius: 4px;
+.legend-item:hover {
+    transform: translateX(3px);
+}
+
+.legend-left {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.color-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
     display: inline-block;
+}
+
+.color-dot.bg-green {
+    background-color: var(--green);
+    box-shadow: 0 0 8px var(--green);
+}
+
+.color-dot.bg-yellow {
+    background-color: var(--yellow);
+    box-shadow: 0 0 8px var(--yellow);
+}
+
+.color-dot.bg-red {
+    background-color: var(--red);
+    box-shadow: 0 0 8px var(--red);
+}
+
+.legend-range {
+    font-family: var(--font-heading);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.legend-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.green-badge {
+    background: rgba(0, 230, 118, 0.1);
+    color: var(--green);
+    border: 1px solid rgba(0, 230, 118, 0.2);
+}
+
+.yellow-badge {
+    background: rgba(255, 214, 0, 0.1);
+    color: var(--yellow);
+    border: 1px solid rgba(255, 214, 0, 0.2);
+}
+
+.red-badge {
+    background: rgba(255, 23, 68, 0.1);
+    color: var(--red);
+    border: 1px solid rgba(255, 23, 68, 0.2);
+}
+
+@keyframes hf-pulse-red {
+    0% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.4); }
+    70% { transform: scale(1.2); opacity: 0.7; box-shadow: 0 0 0 6px rgba(255, 23, 68, 0); }
+    100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); }
+}
+
+@keyframes hf-pulse-green {
+    0% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.4); }
+    70% { transform: scale(1.2); opacity: 0.7; box-shadow: 0 0 0 6px rgba(0, 230, 118, 0); }
+    100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(0, 230, 118, 0); }
+}
+
+.animated-pulse-red {
+    animation: hf-pulse-red 2s infinite ease-in-out;
+}
+
+.animated-pulse-green {
+    animation: hf-pulse-green 2s infinite ease-in-out;
 }
 
 /* Financial Position Stats Grid */

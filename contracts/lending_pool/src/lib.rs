@@ -527,6 +527,71 @@ impl LendingPoolContract {
         );
     }
 
+    /// Toggle using an asset as collateral.
+    ///
+    /// Flow:
+    /// 1. Caller authorizes the transaction
+    /// 2. Require protocol not paused
+    /// 3. Update reserve indices
+    /// 4. Fetch user config bitmap
+    /// 5. If disabling, verify Health Factor remains above liquidation threshold
+    /// 6. Save updated bitmap and extend TTL
+    pub fn toggle_collateral(env: Env, caller: Address, asset: Address, use_as_collateral: bool) {
+        caller.require_auth();
+        Self::require_not_paused(&env);
+
+        let reserve_index = Self::get_reserve_index(&env, &asset);
+        let config = Self::get_reserve_config(&env, reserve_index);
+
+        if !config.is_active {
+            panic!("reserve not active");
+        }
+
+        // Accrue interest
+        Self::update_reserve_indices(&env, reserve_index);
+
+        let mut bitmap = Self::get_user_bitmap(&env, &caller);
+        let currently_collateral = is_using_as_collateral(bitmap, reserve_index as u8);
+
+        if currently_collateral == use_as_collateral {
+            // Already in desired state, do nothing
+            return;
+        }
+
+        if !use_as_collateral {
+            // Check if user has borrows and if disabling is safe
+            if has_any_borrows(bitmap) {
+                // Set temporary bitmap with collateral disabled to simulate health factor
+                let mut temp_bitmap = bitmap;
+                set_using_as_collateral(&mut temp_bitmap, reserve_index as u8, false);
+                
+                // Temporarily save bitmap for calculation (calculate_health_factor_internal reads from storage)
+                Self::set_user_bitmap(&env, &caller, temp_bitmap);
+                let hf = Self::calculate_health_factor_internal(&env, &caller);
+                
+                // Revert to original bitmap
+                Self::set_user_bitmap(&env, &caller, bitmap);
+
+                if hf < HEALTH_FACTOR_LIQUIDATION_THRESHOLD {
+                    panic!("health factor below threshold");
+                }
+            }
+        }
+
+        // Set the collateral flag in user config bitmap
+        set_using_as_collateral(&mut bitmap, reserve_index as u8, use_as_collateral);
+        Self::set_user_bitmap(&env, &caller, bitmap);
+
+        env.storage()
+            .instance()
+            .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+
+        env.events().publish(
+            (symbol_short!("toggle"), caller, asset),
+            use_as_collateral,
+        );
+    }
+
     // ══════════════════════════════════════════
     // View Functions
     // ══════════════════════════════════════════
@@ -1142,5 +1207,109 @@ mod test {
         let oracle2 = Address::generate(&env);
         let treasury2 = Address::generate(&env);
         client.initialize(&admin2, &oracle2, &treasury2);
+    }
+
+    #[test]
+    fn test_toggle_collateral() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (_, client) = setup_pool(&env);
+
+        let admin = Address::generate(&env);
+        let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
+        let token_admin = StellarAssetClient::new(&env, &token_contract.address());
+        let asset = token_contract.address();
+
+        let user = Address::generate(&env);
+        token_admin.mint(&user, &10_000_0000000i128);
+
+        let config = ReserveConfig {
+            asset: asset.clone(),
+            a_token: Address::generate(&env),
+            debt_token: Address::generate(&env),
+            ltv: 7500,
+            liquidation_threshold: 8000,
+            liquidation_bonus: 500,
+            reserve_factor: 1000,
+            decimals: 7,
+            is_active: true,
+            is_borrowing_enabled: true,
+            reserve_index: 0,
+        };
+        let rate_config = InterestRateConfig {
+            optimal_utilization: WAD * 80 / 100,
+            base_rate: WAD * 2 / 100,
+            slope1: WAD * 4 / 100,
+            slope2: WAD * 300 / 100,
+        };
+
+        client.add_reserve(&config, &rate_config);
+
+        // Supply first
+        client.supply(&user, &asset, &1000_0000000i128);
+
+        // Verify collateral bit is automatically turned on upon supply
+        let user_data = client.get_user_data(&user);
+        assert!(is_using_as_collateral(user_data.config_bitmap, 0));
+
+        // Toggle collateral off
+        client.toggle_collateral(&user, &asset, &false);
+        let user_data2 = client.get_user_data(&user);
+        assert!(!is_using_as_collateral(user_data2.config_bitmap, 0));
+
+        // Toggle collateral back on
+        client.toggle_collateral(&user, &asset, &true);
+        let user_data3 = client.get_user_data(&user);
+        assert!(is_using_as_collateral(user_data3.config_bitmap, 0));
+    }
+
+    #[test]
+    #[should_panic(expected = "health factor below threshold")]
+    fn test_toggle_collateral_fails_with_debt() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (pool_id, client) = setup_pool(&env);
+
+        let admin = Address::generate(&env);
+        let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
+        let token_admin = StellarAssetClient::new(&env, &token_contract.address());
+        let asset = token_contract.address();
+
+        let user = Address::generate(&env);
+        token_admin.mint(&user, &10_000_0000000i128);
+        token_admin.mint(&pool_id, &10_000_0000000i128); // Give pool some liquidity to borrow
+
+        let config = ReserveConfig {
+            asset: asset.clone(),
+            a_token: Address::generate(&env),
+            debt_token: Address::generate(&env),
+            ltv: 7500,
+            liquidation_threshold: 8000,
+            liquidation_bonus: 500,
+            reserve_factor: 1000,
+            decimals: 7,
+            is_active: true,
+            is_borrowing_enabled: true,
+            reserve_index: 0,
+        };
+        let rate_config = InterestRateConfig {
+            optimal_utilization: WAD * 80 / 100,
+            base_rate: WAD * 2 / 100,
+            slope1: WAD * 4 / 100,
+            slope2: WAD * 300 / 100,
+        };
+
+        client.add_reserve(&config, &rate_config);
+
+        // Supply 1000
+        client.supply(&user, &asset, &1000_0000000i128);
+
+        // Borrow 100
+        client.borrow(&user, &asset, &100_0000000i128);
+
+        // Now try to turn off collateral - should panic!
+        client.toggle_collateral(&user, &asset, &false);
     }
 }

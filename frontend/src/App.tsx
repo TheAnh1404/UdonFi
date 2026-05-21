@@ -338,6 +338,62 @@ function App() {
         });
     };
 
+    // Toggle collateral switch
+    const handleToggleCollateral = (symbol: 'XLM' | 'USDC', useAsCollateral: boolean) => {
+        if (!wallet.isConnected) {
+            handleConnectWallet();
+            return;
+        }
+
+        setUserBalances((prev) => {
+            // If turning off collateral, verify simulated health factor remains safe
+            if (!useAsCollateral) {
+                const xlmSupplied = prev.suppliedScaled.XLM * reserves.XLM.liquidityIndex;
+                const usdcSupplied = prev.suppliedScaled.USDC * reserves.USDC.liquidityIndex;
+                const xlmDebt = prev.debtScaled.XLM * reserves.XLM.borrowIndex;
+                const usdcDebt = prev.debtScaled.USDC * reserves.USDC.borrowIndex;
+
+                const xlmSuppliedValue = xlmSupplied * reserves.XLM.price;
+                const usdcSuppliedValue = usdcSupplied * reserves.USDC.price;
+                const xlmDebtValue = xlmDebt * reserves.XLM.price;
+                const usdcDebtValue = usdcDebt * reserves.USDC.price;
+
+                const isXlmCol = symbol === 'XLM' ? false : ((prev.bitmap & 1n) === 1n);
+                const isUsdcCol = symbol === 'USDC' ? false : ((prev.bitmap & 4n) === 4n);
+
+                const totalCollateralVal = (isXlmCol ? xlmSuppliedValue : 0) + (isUsdcCol ? usdcSuppliedValue : 0);
+                const totalDebtVal = xlmDebtValue + usdcDebtValue;
+
+                const simHf = totalDebtVal > 0 ? (totalCollateralVal * 0.825) / totalDebtVal : Infinity;
+
+                if (simHf < 1.0) {
+                    addLog('ERROR', `⚠️ LỖI REVERT: Không thể tắt thế chấp cho ${symbol}!`);
+                    addLog('INFO', `Hệ số sức khỏe HF mô phỏng sẽ giảm xuống ${simHf.toFixed(2)} (nguy hiểm < 1.0). Giao dịch bị Soroban VM từ chối.`);
+                    return prev;
+                }
+            }
+
+            // Toggle bitmap: XLM collateral is bit 0, USDC collateral is bit 2
+            const bitIndex = symbol === 'XLM' ? 0n : 2n;
+            const newBitmap = useAsCollateral 
+                ? prev.bitmap | (1n << bitIndex) 
+                : prev.bitmap & ~(1n << bitIndex);
+
+            addLog('EVENT', `Gọi thành công toggle_collateral() trong LendingPool cho ${symbol}.`);
+            addLog('SUCCESS', `Đã ${useAsCollateral ? 'KÍCH HOẠT' : 'HỦY KÍCH HOẠT'} thế chấp tài sản ${symbol} trên Ledger.`);
+            addLog('EVENT', `Soroban VM: Đã cập nhật bitmap u128 tài khoản thành 0x${newBitmap.toString(16).toUpperCase()}`);
+            
+            const renewedTtl = Math.min(6000, prev.ttl + 200);
+            addLog('INFO', `Gia hạn thời gian sống dữ liệu TTL thêm 200 Ledgers (Mới: ${renewedTtl})`);
+
+            return {
+                ...prev,
+                bitmap: newBitmap,
+                ttl: renewedTtl
+            };
+        });
+    };
+
     // Two-step liquidation sandbox callbacks
     const handleSlideSandboxPrice = (price: number) => {
         setSandbox((prev) => ({ ...prev, xlmPrice: price }));
@@ -430,6 +486,7 @@ function App() {
                     reserves={reserves}
                     userBalances={userBalances}
                     onAction={handleActionClick}
+                    onToggleCollateral={handleToggleCollateral}
                 />
                 
                 {isInteractionOpen && (

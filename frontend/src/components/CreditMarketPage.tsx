@@ -8,7 +8,6 @@ import {
     Cpu, 
     Hourglass, 
     AreaChart, 
-    TrendingUp, 
     User, 
     Wallet, 
     Zap,
@@ -373,6 +372,11 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
                 </div>
             </div>
 
+            {/* Full-width Live TradingView Price Widget */}
+            <div style={{ marginBottom: '1.25rem' }}>
+                <TradingViewChart />
+            </div>
+
             {/* Split Operations Panel */}
             <div style={{
                 display: 'grid',
@@ -380,69 +384,21 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
                 gap: '1.25rem',
                 alignItems: 'start'
             }}>
-                {/* Left Column: Market Table and Charts */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    {/* Live TradingView Price Widget */}
-                    <div className="card glass-card">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem 0 1rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                <TrendingUp size={14} className="highlight-cyan" />
-                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-bright)' }}>ĐỒ THỊ GIÁ TRỰC TUYẾN</span>
-                            </div>
-                            <div style={{ display: 'flex', gap: '0.25rem' }}>
-                                <button 
-                                    onClick={() => handleAssetChange('XLM')}
-                                    style={{
-                                        background: activeAsset === 'XLM' ? 'rgba(0, 242, 254, 0.08)' : 'transparent',
-                                        border: '1px solid ' + (activeAsset === 'XLM' ? 'rgba(0, 242, 254, 0.2)' : 'rgba(255,255,255,0.05)'),
-                                        color: activeAsset === 'XLM' ? 'var(--cyan)' : 'var(--text-dim)',
-                                        borderRadius: '4px',
-                                        fontSize: '0.65rem',
-                                        padding: '0.15rem 0.4rem',
-                                        fontWeight: 600,
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    XLM/USD
-                                </button>
-                                <button 
-                                    onClick={() => handleAssetChange('USDC')}
-                                    style={{
-                                        background: activeAsset === 'USDC' ? 'rgba(0, 242, 254, 0.08)' : 'transparent',
-                                        border: '1px solid ' + (activeAsset === 'USDC' ? 'rgba(0, 242, 254, 0.2)' : 'rgba(255,255,255,0.05)'),
-                                        color: activeAsset === 'USDC' ? 'var(--cyan)' : 'var(--text-dim)',
-                                        borderRadius: '4px',
-                                        fontSize: '0.65rem',
-                                        padding: '0.15rem 0.4rem',
-                                        fontWeight: 600,
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    USDC/USD
-                                </button>
-                            </div>
-                        </div>
-                        <div style={{ height: '240px', padding: '0.5rem' }}>
-                            <TradingViewChart />
-                        </div>
+                {/* Left Column: Lending Assets Market Table */}
+                <div className="card glass-card" style={{ padding: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.85rem' }}>
+                        <Coins size={14} className="highlight-purple" />
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-bright)' }}>DANH SÁCH TÀI SẢN TÍN DỤNG</span>
                     </div>
-
-                    {/* Lending Assets Market Table */}
-                    <div className="card glass-card" style={{ padding: '1rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.85rem' }}>
-                            <Coins size={14} className="highlight-purple" />
-                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-bright)' }}>DANH SÁCH TÀI SẢN TÍN DỤNG</span>
-                        </div>
-                        <MarketTable 
-                            reserves={reserves} 
-                            userBalances={userBalances} 
-                            onAction={(act, ast) => {
-                                handleActionChange(act);
-                                handleAssetChange(ast);
-                            }}
-                            onToggleCollateral={onToggleCollateral}
-                        />
-                    </div>
+                    <MarketTable 
+                        reserves={reserves} 
+                        userBalances={userBalances} 
+                        onAction={(act, ast) => {
+                            handleActionChange(act);
+                            handleAssetChange(ast);
+                        }}
+                        onToggleCollateral={onToggleCollateral}
+                    />
                 </div>
 
                 {/* Right Column: Wallet Operation Terminal (Premium Dashboard) */}

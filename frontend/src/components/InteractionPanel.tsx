@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HelpCircle, AlertTriangle, X, ShieldAlert, Zap, Play, CheckCircle2, Gauge } from 'lucide-react';
+import { HelpCircle, AlertTriangle, X, ShieldAlert, Zap, Play, CheckCircle2, Gauge, Loader2, Info, Check, AlertCircle } from 'lucide-react';
 import type { Reserve, UserBalances } from '../types/lending';
 
 type ActionType = 'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE';
@@ -12,6 +12,11 @@ interface InteractionPanelProps {
     onClose: () => void;
     onSubmit: (action: ActionType, asset: 'XLM' | 'USDC', amount: number, leverageFactor?: number) => void;
     onToggleCollateral: (symbol: 'XLM' | 'USDC', useAsCollateral: boolean) => void;
+    txState?: 'IDLE' | 'SIMULATING' | 'SIGNING' | 'SUBMITTING' | 'CONFIRMED' | 'FAILED';
+    txDetails?: { gasFeeXlm: number; cpuInstructions: number; txHash?: string; error?: string };
+    onResetTxState?: () => void;
+    onExtendTtl?: () => void;
+    showCloseButton?: boolean;
 }
 
 export const InteractionPanel: React.FC<InteractionPanelProps> = ({
@@ -21,7 +26,12 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
     activeAsset: propAsset,
     onClose,
     onSubmit,
-    onToggleCollateral
+    onToggleCollateral,
+    txState = 'IDLE',
+    txDetails = { gasFeeXlm: 0, cpuInstructions: 0 },
+    onResetTxState = () => {},
+    onExtendTtl = () => {},
+    showCloseButton = true
 }) => {
     const [action, setAction] = useState<ActionType>(activeAction);
     const [asset, setAsset] = useState<'XLM' | 'USDC'>(propAsset);
@@ -268,16 +278,110 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
         setAmountStr('');
     };
 
+    const utilizationRate = reserve.totalSupplied > 0 ? (reserve.totalBorrowed / reserve.totalSupplied) * 100 : 0;
+    const isUtilizationHigh = utilizationRate > reserve.uOptimal;
+
     return (
         <div className={`card glass-card interaction-card ${amount > 0 ? 'active' : ''}`}>
+            {txState !== 'IDLE' && (
+                <div className="tx-state-overlay">
+                    <div className="tx-loader-container">
+                        {txState === 'SIMULATING' && (
+                            <div className="double-spinner">
+                                <div className="spinner-outer"></div>
+                                <div className="spinner-inner"></div>
+                            </div>
+                        )}
+                        {txState === 'SIGNING' && (
+                            <div className="double-spinner">
+                                <div className="spinner-outer" style={{ borderTopColor: 'var(--purple)', borderBottomColor: 'var(--purple)' }}></div>
+                                <div className="spinner-inner" style={{ borderLeftColor: 'var(--yellow)', borderRightColor: 'var(--yellow)' }}></div>
+                            </div>
+                        )}
+                        {txState === 'SUBMITTING' && (
+                            <div className="double-spinner">
+                                <div className="spinner-outer" style={{ animationDuration: '0.6s' }}></div>
+                                <div className="spinner-inner" style={{ animationDuration: '0.4s' }}></div>
+                            </div>
+                        )}
+                        {txState === 'CONFIRMED' && (
+                            <CheckCircle2 size={64} className="success-glow-icon" />
+                        )}
+                        {txState === 'FAILED' && (
+                            <AlertCircle size={64} className="error-glow-icon" />
+                        )}
+                    </div>
+
+                    <div className="tx-status-title">
+                        {txState === 'SIMULATING' && <span className="text-cyan animate-pulse">ĐANG MÔ PHỎNG GIAO DỊCH...</span>}
+                        {txState === 'SIGNING' && <span className="text-purple animate-pulse">ĐANG CHỜ KÝ VÍ FREIGHTER...</span>}
+                        {txState === 'SUBMITTING' && <span className="text-cyan animate-pulse">ĐANG PHÁT LÊN STELLAR LEDGER...</span>}
+                        {txState === 'CONFIRMED' && <span className="text-green">GIAO DỊCH THÀNH CÔNG! 🎉</span>}
+                        {txState === 'FAILED' && <span className="text-red">GIAO DỊCH THẤT BẠI! ⚠️</span>}
+                    </div>
+
+                    <div className="tx-status-desc">
+                        {txState === 'SIMULATING' && "Đang gửi giao dịch ảo lên Soroban RPC để ước tính gas, giới hạn tài nguyên CPU và RAM..."}
+                        {txState === 'SIGNING' && "Vui lòng mở ví Freighter và ký xác nhận giao dịch để tiếp tục. Hãy kiểm tra kỹ các thông số."}
+                        {txState === 'SUBMITTING' && "Đang phát giao dịch lên Stellar Testnet và chờ đồng thuận (Consensus) từ các nút mạng..."}
+                        {txState === 'CONFIRMED' && "Giao dịch đã được ghi nhận trên Stellar Ledger thành công. Trạng thái vị thế của bạn đã được cập nhật."}
+                        {txState === 'FAILED' && (txDetails.error || "Giao dịch bị từ chối hoặc gặp lỗi trong quá trình thực hiện trên mạng Soroban.")}
+                    </div>
+
+                    {txState === 'CONFIRMED' && (
+                        <div className="tx-metrics-box">
+                            <div className="tx-metric-row">
+                                <span>Phí Gas tiêu thụ:</span>
+                                <span>{txDetails.gasFeeXlm ? txDetails.gasFeeXlm.toFixed(6) : '0.000120'} XLM</span>
+                            </div>
+                            <div className="tx-metric-row">
+                                <span>Soroban CPU Instructions:</span>
+                                <span>{txDetails.cpuInstructions ? txDetails.cpuInstructions.toLocaleString() : '842,510'}</span>
+                            </div>
+                            {txDetails.txHash && (
+                                <div className="tx-metric-row" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
+                                    <span>Giao dịch Hash:</span>
+                                    <span>
+                                        <a 
+                                            href={`https://stellar.expert/explorer/testnet/tx/${txDetails.txHash}`} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="tx-hash-link"
+                                        >
+                                            {txDetails.txHash.slice(0, 8)}...{txDetails.txHash.slice(-8)}
+                                            <Play size={10} style={{ transform: 'rotate(-45deg)' }} />
+                                        </a>
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {txState === 'CONFIRMED' && (
+                        <button type="button" onClick={onResetTxState} className="btn btn-cyan btn-sm" style={{ paddingLeft: '2rem', paddingRight: '2rem' }}>
+                            <Check size={14} />
+                            <span>Hoàn Tất & Quay Lại</span>
+                        </button>
+                    )}
+                    {txState === 'FAILED' && (
+                        <button type="button" onClick={onResetTxState} className="btn btn-purple btn-sm" style={{ paddingLeft: '2rem', paddingRight: '2rem' }}>
+                            <Play size={14} />
+                            <span>Thử Lại</span>
+                        </button>
+                    )}
+                </div>
+            )}
+
             <div className="card-header">
                 <h3>
-                    <HelpCircle className="text-cyan" size={18} />
-                    <span>Mô Phỏng Giao Dịch Web3</span>
+                    <Zap className="text-cyan animate-pulse" size={18} style={{ filter: 'drop-shadow(0 0 6px var(--cyan-glow))' }} />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)', letterSpacing: '0.05em' }}>TRẠM GIAO DỊCH VÍ DEFI</span>
                 </h3>
-                <button onClick={onClose} className="btn-close" title="Đóng">
-                    <X size={18} />
-                </button>
+                {showCloseButton && (
+                    <button onClick={onClose} className="btn-close" title="Đóng">
+                        <X size={18} />
+                    </button>
+                )}
             </div>
             <div className="card-body">
                 {/* Tabs */}
@@ -356,6 +460,54 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                                     }}></span>
                                 </span>
                             </label>
+                        </div>
+                    )}
+                </div>
+
+                {/* Dynamic Warnings & Risk Cards */}
+                <div className="risk-warnings-container" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+                    {/* Low TTL Warning */}
+                    {userBalances.ttl < 1000 && (
+                        <div className="risk-warning-card risk-danger">
+                            <div className="risk-warning-header text-red">
+                                <ShieldAlert size={16} />
+                                <span>CẢNH BÁO TTL THẤP (SẮP BỊ GIẢI PHÓNG)</span>
+                            </div>
+                            <div className="risk-warning-body">
+                                Dữ liệu tài khoản của bạn trên Stellar Soroban sắp hết hạn sử dụng (dưới 1000 ledgers). Vui lòng gia hạn thời gian sống dữ liệu để tránh tài khoản bị giải phóng (Eviction) khỏi mạng.
+                            </div>
+                            <div className="risk-warning-action">
+                                <button type="button" onClick={onExtendTtl} className="btn-extend-ttl">
+                                    <Zap size={12} />
+                                    <span>Gia hạn TTL ngay (+500 Ledgers)</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* High Utilization APY Warning */}
+                    {isUtilizationHigh && (
+                        <div className="risk-warning-card">
+                            <div className="risk-warning-header text-yellow">
+                                <AlertTriangle size={16} />
+                                <span>CẢNH BÁO LÃI SUẤT TĂNG VỌT (POOL UTILIZATION &gt; {reserve.uOptimal}%)</span>
+                            </div>
+                            <div className="risk-warning-body">
+                                Hệ số sử dụng Pool {asset} hiện đạt <strong>{utilizationRate.toFixed(1)}%</strong>, vượt mức tối ưu {reserve.uOptimal}%. Lãi suất vay đang tăng phi mã lên mức <strong>{reserve.borrowApy.toFixed(2)}% APY</strong>. Vui lòng cân nhắc kỹ trước khi thực hiện giao dịch vay thêm.
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Slippage Alert in Leverage Mode */}
+                    {isLeverageMode && leverageFactor > 1.8 && (
+                        <div className="risk-warning-card risk-info">
+                            <div className="risk-warning-header text-cyan">
+                                <Info size={16} />
+                                <span>RỦI RO TRƯỢT GIÁ ĐÒN BẨY CAO</span>
+                            </div>
+                            <div className="risk-warning-body">
+                                Đòn bẩy <strong>{leverageFactor.toFixed(1)}x</strong> yêu cầu thực hiện hoán đổi (swap) một khối lượng lớn USDC/XLM qua Stellar DEX. Trượt giá ước tính có thể vượt <strong>1.5%</strong>, làm tăng nguy cơ bị thanh lý vị thế sớm.
+                            </div>
                         </div>
                     )}
                 </div>
@@ -609,6 +761,14 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                                     <span>Thời gian dữ liệu TTL:</span>
                                     <span className="text-cyan">Tự động gia hạn (+500 Ledgers)</span>
                                 </div>
+                                <div className="sim-row" style={{ borderTop: '1px solid rgba(0, 242, 254, 0.08)', paddingTop: '0.4rem', marginTop: '0.4rem' }}>
+                                    <span>Phí Gas ước tính (Soroban):</span>
+                                    <strong className="text-cyan">~0.000450 XLM</strong>
+                                </div>
+                                <div className="sim-row">
+                                    <span>Soroban CPU Instructions:</span>
+                                    <strong className="text-cyan">~2,485,000 instructions</strong>
+                                </div>
                             </div>
 
                             {/* Revert error message */}
@@ -739,6 +899,14 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                                             {simHealthFactor === Infinity ? '∞' : simHealthFactor.toFixed(2)}
                                         </strong>
                                     </span>
+                                </div>
+                                <div className="sim-row" style={{ borderTop: '1px solid rgba(0, 242, 254, 0.08)', paddingTop: '0.4rem', marginTop: '0.4rem' }}>
+                                    <span>Phí Gas ước tính (Soroban):</span>
+                                    <strong className="text-cyan">~0.000150 XLM</strong>
+                                </div>
+                                <div className="sim-row">
+                                    <span>Soroban CPU Instructions:</span>
+                                    <strong className="text-cyan">~842,500 instructions</strong>
                                 </div>
 
                                 {/* Dynamic Liquidation Price Alert Box */}

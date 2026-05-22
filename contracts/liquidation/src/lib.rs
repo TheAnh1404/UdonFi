@@ -23,7 +23,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, symbol_short, token, Address, BytesN, Env,
+    contract, contractimpl, symbol_short, token, Address, BytesN, Env, IntoVal,
 };
 use udonfi_common::{
     bitmap::*,
@@ -97,34 +97,67 @@ impl LiquidationContract {
         }
 
         // Get pool address for cross-contract queries
-        let _pool: Address = env
+        let pool: Address = env
             .storage()
             .instance()
             .get(&LiquidationDataKey::Pool)
             .expect("not initialized");
 
-        // ──────────────────────────────────────
-        // In production, this section would:
-        // 1. Call pool.get_user_data(borrower) to get HF
-        // 2. Call oracle.get_price_usd(debt_asset) and oracle.get_price_usd(collateral_asset)
-        // 3. Verify HF < 1.0
-        //
-        // For the standalone contract, we compute based on stored parameters.
-        // The LendingPool integration would pass these values.
-        // ──────────────────────────────────────
+        // Try to query Health Factor from pool to verify borrower is eligible for liquidation
+        let hf_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
+            &pool,
+            &soroban_sdk::Symbol::new(&env, "get_health_factor"),
+            soroban_sdk::vec![&env, borrower.clone().into_val(&env)]
+        );
 
-        // Calculate collateral to seize
-        // collateral_to_seize = (debt_to_cover * debt_price * (1 + liquidation_bonus)) / collateral_price
-        //
-        // Using WAD math:
-        // We use a default 5% liquidation bonus (500 bps)
-        let liquidation_bonus: u32 = 500; // 5% — would come from reserve config
+        if let Ok(Ok(hf)) = hf_res {
+            if hf >= HEALTH_FACTOR_LIQUIDATION_THRESHOLD {
+                panic!("borrower not liquidatable");
+            }
+        }
+
+        // Try to get reserve config for the actual liquidation bonus
+        let mut liquidation_bonus: u32 = 500; // default 5% fallback
+        let reserve_res = env.try_invoke_contract::<ReserveConfig, soroban_sdk::Error>(
+            &pool,
+            &soroban_sdk::Symbol::new(&env, "get_reserve_info"),
+            soroban_sdk::vec![&env, collateral_asset.clone().into_val(&env)]
+        );
+        if let Ok(Ok(config)) = reserve_res {
+            liquidation_bonus = config.liquidation_bonus;
+        }
+
         let bonus_factor = WAD + percent_to_wad(liquidation_bonus);
 
-        // For standalone testing: assume 1:1 prices
-        // In production: fetch from oracle
-        let debt_price = WAD; // $1.00
-        let collateral_price = WAD; // $1.00
+        // Fetch prices from Price Oracle adapter via the address registered in the LendingPool
+        let mut debt_price = WAD;
+        let mut collateral_price = WAD;
+
+        let oracle_res = env.try_invoke_contract::<Address, soroban_sdk::Error>(
+            &pool,
+            &soroban_sdk::Symbol::new(&env, "oracle"),
+            soroban_sdk::vec![&env]
+        );
+
+        if let Ok(Ok(oracle)) = oracle_res {
+            let debt_price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
+                &oracle,
+                &soroban_sdk::Symbol::new(&env, "get_price_usd"),
+                soroban_sdk::vec![&env, debt_asset.clone().into_val(&env)]
+            );
+            if let Ok(Ok(p)) = debt_price_res {
+                debt_price = p;
+            }
+
+            let collateral_price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
+                &oracle,
+                &soroban_sdk::Symbol::new(&env, "get_price_usd"),
+                soroban_sdk::vec![&env, collateral_asset.clone().into_val(&env)]
+            );
+            if let Ok(Ok(p)) = collateral_price_res {
+                collateral_price = p;
+            }
+        }
 
         let debt_value = wad_mul(debt_to_cover, debt_price).expect("overflow");
         let seized_value = wad_mul(debt_value, bonus_factor).expect("overflow");
@@ -224,12 +257,8 @@ impl LiquidationContract {
         debt_token.transfer(&liquidator, &pool, &params.debt_to_cover);
 
         // 2. Pool transfers collateral to liquidator (with bonus)
-        // In production: Pool would authorize this transfer
-        // For now: direct transfer from pool
         let collateral_token = token::Client::new(&env, &params.collateral_asset);
-        // NOTE: In production, the Pool contract would need to approve this,
-        // or this contract would call pool.liquidate_transfer() which handles
-        // the balance updates internally.
+        collateral_token.transfer(&pool, &params.liquidator, &params.collateral_to_seize);
 
         // Clean up session
         env.storage().temporary().remove(
@@ -268,12 +297,18 @@ impl LiquidationContract {
     /// Returns true if Health Factor < 1.0.
     ///
     /// In production, this would call pool.get_health_factor(borrower).
-    pub fn is_liquidatable(env: Env, _borrower: Address) -> bool {
-        // Placeholder — in production:
-        // let pool: Address = env.storage().instance().get(&LiquidationDataKey::Pool).unwrap();
-        // let pool_client = LendingPoolContractClient::new(&env, &pool);
-        // let hf = pool_client.get_health_factor(&borrower);
-        // hf < HEALTH_FACTOR_LIQUIDATION_THRESHOLD
+    pub fn is_liquidatable(env: Env, borrower: Address) -> bool {
+        let pool_res = env.storage().instance().get::<_, Address>(&LiquidationDataKey::Pool);
+        if let Some(pool) = pool_res {
+            let hf_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
+                &pool,
+                &soroban_sdk::Symbol::new(&env, "get_health_factor"),
+                soroban_sdk::vec![&env, borrower.into_val(&env)]
+            );
+            if let Ok(Ok(hf)) = hf_res {
+                return hf < HEALTH_FACTOR_LIQUIDATION_THRESHOLD;
+            }
+        }
         false
     }
 }

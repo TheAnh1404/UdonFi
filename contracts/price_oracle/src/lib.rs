@@ -10,13 +10,29 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, Symbol};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, Symbol};
 use udonfi_common::{LendingError, OracleDataKey, WAD, TTL_EXTEND_TO, TTL_THRESHOLD};
 
-/// Default maximum price age: 100 ledgers (~500 seconds at 5s/ledger)
-const DEFAULT_MAX_PRICE_AGE: u32 = 100;
+#[contracttype]
+#[derive(Clone)]
+pub enum LocalOracleKey {
+    AssetSymbol(Address),
+}
 
-/// Default maximum price deviation: 2000 basis points = 20%
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct PriceData {
+    pub price: i128,
+    pub timestamp: u64,
+}
+
+#[soroban_sdk::contractclient(name = "ReflectorClient")]
+pub trait ReflectorOracle {
+    fn lastprice(env: Env, asset: soroban_sdk::Symbol) -> Option<PriceData>;
+    fn decimals(env: Env) -> u32;
+}
+
+const DEFAULT_MAX_PRICE_AGE: u32 = 100;
 const DEFAULT_MAX_DEVIATION_BPS: u32 = 2000;
 
 #[contract]
@@ -63,32 +79,82 @@ impl PriceOracleContract {
     /// Get the USD price of an asset in WAD precision.
     ///
     /// This function:
-    /// 1. Queries the Reflector Oracle for the latest price
+    /// 1. Tries to query the Reflector Oracle for the latest price if symbol mapping exists
     /// 2. Validates freshness (not stale)
-    /// 3. Validates deviation from last known price (circuit breaker)
-    /// 4. Normalizes to WAD precision (10^18)
+    /// 3. Normalizes to WAD precision (10^18)
+    /// 4. Validates deviation from last known price (circuit breaker)
+    /// 5. Gracefully falls back to local admin mock price if oracle is not configured,
+    ///    returns None, or is stale.
     ///
     /// # Arguments
     /// * `asset` - The asset contract address to price
     ///
     /// # Returns
     /// Price in WAD precision (e.g., $1.50 = 1_500_000_000_000_000_000)
-    ///
-    /// # Note
-    /// In production, this would call the actual Reflector Oracle contract.
-    /// For testnet/development, this returns a configurable mock price.
     pub fn get_price_usd(env: Env, asset: Address) -> i128 {
         env.storage()
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        // In production: Call Reflector Oracle
-        // let reflector: Address = env.storage().instance()
-        //     .get(&OracleDataKey::ReflectorAddress).unwrap();
-        // let oracle_client = reflector::Client::new(&env, &reflector);
-        // let price_data = oracle_client.get_price(&asset_symbol);
+        // Try calling Reflector Oracle if a symbol is mapped for this asset
+        if let Some(symbol) = env.storage().persistent().get::<_, Symbol>(&LocalOracleKey::AssetSymbol(asset.clone())) {
+            if let Some(reflector_address) = env.storage().instance().get::<_, Address>(&OracleDataKey::ReflectorAddress) {
+                let client = ReflectorClient::new(&env, &reflector_address);
+                if let Some(price_data) = client.lastprice(&symbol) {
+                    let max_age = env.storage().instance().get::<_, u32>(&OracleDataKey::MaxPriceAge).unwrap_or(DEFAULT_MAX_PRICE_AGE) as u64;
+                    let current_time = env.ledger().timestamp();
+                    
+                    // Freshness check: reject if price is older than maximum age
+                    if current_time <= price_data.timestamp + max_age {
+                        let decimals = client.decimals();
+                        let mut price = price_data.price;
 
-        // For now: Read from stored mock prices (set by admin for testing)
+                        // Normalize decimals to WAD (10^18)
+                        if decimals <= 18 {
+                            let diff = 18 - decimals;
+                            let mut multiplier = 1i128;
+                            for _ in 0..diff {
+                                multiplier *= 10;
+                            }
+                            price = price.checked_mul(multiplier).expect("Overflow in price normalization");
+                        } else {
+                            let diff = decimals - 18;
+                            let mut divisor = 1i128;
+                            for _ in 0..diff {
+                                divisor *= 10;
+                            }
+                            price = price.checked_div(divisor).expect("Underflow in price normalization");
+                        }
+
+                        if price <= 0 {
+                            panic!("invalid reflector price");
+                        }
+
+                        // Circuit breaker check (if last known price exists)
+                        if let Some(last_price) = env.storage().persistent().get::<_, i128>(&OracleDataKey::LastPrice(asset.clone())) {
+                            let max_deviation = env.storage().instance().get::<_, u32>(&OracleDataKey::MaxPriceDeviation).unwrap_or(DEFAULT_MAX_DEVIATION_BPS) as i128;
+                            let diff = (price - last_price).abs();
+                            let bps = (diff * 10000) / last_price;
+                            if bps > max_deviation {
+                                panic!("Price deviation circuit breaker triggered");
+                            }
+                        }
+
+                        // Store normalized price as LastPrice for future circuit breaker comparison
+                        env.storage().persistent().set(&OracleDataKey::LastPrice(asset.clone()), &price);
+                        env.storage().persistent().extend_ttl(
+                            &OracleDataKey::LastPrice(asset.clone()),
+                            TTL_THRESHOLD,
+                            TTL_EXTEND_TO,
+                        );
+
+                        return price;
+                    }
+                }
+            }
+        }
+
+        // Fallback: Read from stored mock prices (set by admin for testing)
         let price: i128 = env
             .storage()
             .persistent()
@@ -103,6 +169,20 @@ impl PriceOracleContract {
     }
 
     // ── Admin Functions ──────────────────────
+
+    /// Map a token Address to a Reflector Asset Symbol (e.g., Symbol::new(&env, "XLM")).
+    pub fn set_asset_symbol(env: Env, asset: Address, symbol: Symbol) {
+        Self::require_admin(&env);
+
+        env.storage()
+            .persistent()
+            .set(&LocalOracleKey::AssetSymbol(asset.clone()), &symbol);
+        env.storage().persistent().extend_ttl(
+            &LocalOracleKey::AssetSymbol(asset),
+            TTL_THRESHOLD,
+            TTL_EXTEND_TO,
+        );
+    }
 
     /// Set a mock price for testing. In production, prices come from Reflector.
     ///

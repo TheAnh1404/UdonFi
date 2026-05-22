@@ -2154,4 +2154,241 @@ input:checked + .slider:before {
   }
 }
 
+/* Custom styles for the DeFi Transaction Station (Trạm Giao Dịch Ví DeFi) */
+.interaction-card {
+    position: relative;
+    overflow: hidden;
+}
+
+/* Glassmorphic Transaction State Overlay Blocker */
+.tx-state-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(7, 10, 19, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+    animation: fadeInOverlay 0.3s ease-out;
+}
+
+@keyframes fadeInOverlay {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.tx-loader-container {
+    margin-bottom: 1.5rem;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.double-spinner {
+    position: relative;
+    width: 60px;
+    height: 60px;
+}
+
+.spinner-outer {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border: 3px solid transparent;
+    border-top-color: var(--cyan);
+    border-bottom-color: var(--cyan);
+    border-radius: 50%;
+    animation: spin 1.2s linear infinite;
+    filter: drop-shadow(0 0 6px var(--cyan-glow));
+}
+
+.spinner-inner {
+    position: absolute;
+    top: 6px; left: 6px; right: 6px; bottom: 6px;
+    border: 3px solid transparent;
+    border-left-color: var(--purple);
+    border-right-color: var(--purple);
+    border-radius: 50%;
+    animation: spin-reverse 0.9s linear infinite;
+    filter: drop-shadow(0 0 6px var(--purple-glow));
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes spin-reverse {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(-360deg); }
+}
+
+.success-glow-icon {
+    color: var(--green);
+    filter: drop-shadow(0 0 10px rgba(0, 230, 118, 0.4));
+    animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.error-glow-icon {
+    color: var(--red);
+    filter: drop-shadow(0 0 10px rgba(255, 23, 68, 0.4));
+    animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes scaleIn {
+    from { transform: scale(0); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.tx-status-title {
+    font-family: var(--font-heading);
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.75rem;
+}
+
+.tx-status-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    max-width: 280px;
+    margin: 0 auto 1.5rem auto;
+}
+
+.tx-metrics-box {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 1rem;
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.tx-metric-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+}
+
+.tx-metric-row span:first-child {
+    color: var(--text-muted);
+}
+
+.tx-metric-row span:last-child {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.tx-hash-link {
+    color: var(--cyan);
+    text-decoration: none;
+    transition: var(--transition-smooth);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 500;
+}
+
+.tx-hash-link:hover {
+    text-shadow: 0 0 8px var(--cyan-glow);
+    text-decoration: underline;
+}
+
+/* Warnings and Alerts */
+.risk-warning-card {
+    background: rgba(255, 214, 0, 0.06);
+    border: 1px solid rgba(255, 214, 0, 0.15);
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    animation: slideDownWarning 0.3s ease-out;
+}
+
+.risk-warning-card.risk-danger {
+    background: rgba(255, 23, 68, 0.06);
+    border: 1px solid rgba(255, 23, 68, 0.15);
+}
+
+.risk-warning-card.risk-info {
+    background: rgba(0, 242, 254, 0.04);
+    border: 1px solid rgba(0, 242, 254, 0.15);
+}
+
+@keyframes slideDownWarning {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.risk-warning-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.risk-warning-header.text-yellow {
+    color: var(--yellow);
+}
+
+.risk-warning-header.text-red {
+    color: var(--red);
+}
+
+.risk-warning-header.text-cyan {
+    color: var(--cyan);
+}
+
+.risk-warning-body {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.risk-warning-action {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 0.25rem;
+}
+
+.btn-extend-ttl {
+    background: rgba(0, 242, 254, 0.08);
+    border: 1px solid rgba(0, 242, 254, 0.25);
+    color: var(--cyan);
+    font-size: 0.72rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: var(--transition-smooth);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.btn-extend-ttl:hover {
+    background: var(--cyan);
+    color: #070a13;
+    box-shadow: 0 0 10px var(--cyan-glow);
+}
+
+
 

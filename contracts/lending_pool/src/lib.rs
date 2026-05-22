@@ -20,7 +20,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, Vec,
+    contract, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, Vec, IntoVal,
 };
 use udonfi_common::{
     bitmap::*,
@@ -711,6 +711,14 @@ impl LendingPoolContract {
             .unwrap_or(0)
     }
 
+    /// Get the Price Oracle adapter contract address.
+    pub fn oracle(env: Env) -> Address {
+        env.storage()
+            .instance()
+            .get(&PoolDataKey::Oracle)
+            .unwrap()
+    }
+
     /// Get user's deposit balance for a specific asset.
     pub fn get_user_deposit(env: Env, user: Address, asset: Address) -> i128 {
         let reserve_index = Self::get_reserve_index(&env, &asset);
@@ -988,19 +996,23 @@ impl LendingPoolContract {
     }
 
     fn get_asset_price(env: &Env, oracle: &Address, asset: &Address) -> i128 {
-        // Cross-contract call to Oracle
-        // In production: PriceOracleContractClient::new(env, oracle).get_price_usd(asset)
-        // For testing/simplicity, we read from oracle directly
-        let oracle_key = PoolDataKey::ReserveIndexByAsset(asset.clone());
-        // Fallback: Try to read a mock price stored in pool storage
-        // This enables unit testing without deploying the oracle contract
-        env.storage()
-            .persistent()
-            .get::<_, i128>(&PoolDataKey::ReserveByIndex(
-                // Hash the asset address to a deterministic index for price storage
-                7000, // Simplified: use a fixed offset for price mock
-            ))
-            .unwrap_or(WAD) // Default $1.00
+        // Call the PriceOracle adapter contract using try_invoke_contract to fetch the actual price
+        let price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
+            oracle,
+            &soroban_sdk::Symbol::new(env, "get_price_usd"),
+            soroban_sdk::vec![env, asset.clone().into_val(env)]
+        );
+        
+        match price_res {
+            Ok(Ok(price)) => price,
+            _ => {
+                // Fallback: Try to read a mock price stored in pool storage
+                env.storage()
+                    .persistent()
+                    .get::<_, i128>(&PoolDataKey::ReserveByIndex(7000))
+                    .unwrap_or(WAD) // Default $1.00
+            }
+        }
     }
 
     fn calculate_health_factor_internal(env: &Env, user: &Address) -> i128 {

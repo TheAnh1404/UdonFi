@@ -19,6 +19,7 @@ import { SorobanTtl } from './SorobanTtl';
 import { SorobanKinked } from './SorobanKinked';
 import { TradingViewChart } from './TradingViewChart';
 import { MarketTable } from './MarketTable';
+import { InteractionPanel } from './InteractionPanel';
 
 interface CreditMarketPageProps {
     reserves: Record<'XLM' | 'USDC', Reserve>;
@@ -34,6 +35,9 @@ interface CreditMarketPageProps {
     onToggleCollateral: (symbol: 'XLM' | 'USDC', useAsCollateral: boolean) => void;
     onToggleBit: (bitIndex: number) => void;
     onExtendTtl: () => void;
+    txState?: 'IDLE' | 'SIMULATING' | 'SIGNING' | 'SUBMITTING' | 'CONFIRMED' | 'FAILED';
+    txDetails?: { gasFeeXlm: number; cpuInstructions: number; txHash?: string; error?: string };
+    onResetTxState?: () => void;
 }
 
 export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
@@ -44,7 +48,10 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
     onTransactionSubmit,
     onToggleCollateral,
     onToggleBit,
-    onExtendTtl
+    onExtendTtl,
+    txState = 'IDLE',
+    txDetails = { gasFeeXlm: 0, cpuInstructions: 0 },
+    onResetTxState = () => {}
 }) => {
     // Current operation state inside the wallet terminal
     const [activeAction, setActiveAction] = useState<'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE'>('SUPPLY');
@@ -402,284 +409,34 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
                 </div>
 
                 {/* Right Column: Wallet Operation Terminal (Premium Dashboard) */}
-                <div className="card glass-card" style={{ padding: '1rem', border: '1px solid rgba(155, 81, 224, 0.15)', boxShadow: '0 8px 32px rgba(155, 81, 224, 0.03)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.6rem', marginBottom: '0.75rem' }}>
-                        <Zap size={14} style={{ color: 'var(--purple)', filter: 'drop-shadow(0 0 6px rgba(155,81,224,0.4))' }} />
-                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-bright)', letterSpacing: '0.05em' }}>TRẠM GIAO DỊCH VÍ DEFI</span>
+                {!wallet.isConnected ? (
+                    <div className="card glass-card" style={{ padding: '1.5rem', border: '1px solid rgba(155, 81, 224, 0.15)', boxShadow: '0 8px 32px rgba(155, 81, 224, 0.03)', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '350px' }}>
+                        <Wallet size={36} className="highlight-purple animate-pulse" style={{ marginBottom: '1rem', filter: 'drop-shadow(0 0 8px rgba(155,81,224,0.4))' }} />
+                        <h3 style={{ fontSize: '1rem', color: 'var(--text-bright)', fontWeight: 700, marginBottom: '0.5rem', letterSpacing: '0.05em' }}>VUI LÒNG KẾT NỐI VÍ FREIGHTER</h3>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: '1.45', maxWidth: '280px', marginBottom: '1.25rem' }}>
+                            UdonFi yêu cầu kết nối với ví Freighter của bạn trên Stellar Testnet để tải thông số tài khoản và thực thi giao dịch.
+                        </p>
+                        <button onClick={onConnect} className="btn-connect" style={{ fontSize: '0.75rem', padding: '0.5rem 1rem' }}>
+                            <Wallet size={14} />
+                            <span>Kết Nối Ví Freighter</span>
+                        </button>
                     </div>
-
-                    {/* Action Tabs Selector */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.2rem', background: 'rgba(255,255,255,0.02)', padding: '0.2rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)', marginBottom: '1rem' }}>
-                        {(['SUPPLY', 'WITHDRAW', 'BORROW', 'REPAY', 'LEVERAGE'] as const).map((action) => (
-                            <button
-                                key={action}
-                                onClick={() => handleActionChange(action)}
-                                style={{
-                                    background: activeAction === action ? 'var(--purple)' : 'transparent',
-                                    border: 'none',
-                                    color: activeAction === action ? '#fff' : 'var(--text-dim)',
-                                    borderRadius: '5px',
-                                    fontSize: '0.58rem',
-                                    padding: '0.35rem 0',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    transition: 'all 0.2s ease',
-                                    boxShadow: activeAction === action ? '0 0 10px rgba(155,81,224,0.4)' : 'none'
-                                }}
-                            >
-                                {action === 'SUPPLY' ? 'NẠP' : action === 'WITHDRAW' ? 'RÚT' : action === 'BORROW' ? 'VAY' : action === 'REPAY' ? 'TRẢ' : 'LOOP'}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Asset Selector */}
-                    {activeAction !== 'LEVERAGE' && (
-                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                            {(['XLM', 'USDC'] as const).map((asset) => (
-                                <button
-                                    key={asset}
-                                    type="button"
-                                    onClick={() => handleAssetChange(asset)}
-                                    style={{
-                                        flex: 1,
-                                        background: activeAsset === asset ? 'rgba(0, 242, 254, 0.08)' : 'transparent',
-                                        border: '1px solid ' + (activeAsset === asset ? 'var(--cyan)' : 'rgba(255,255,255,0.06)'),
-                                        borderRadius: '8px',
-                                        padding: '0.5rem 0',
-                                        color: activeAsset === asset ? 'var(--cyan)' : 'var(--text-dim)',
-                                        fontSize: '0.75rem',
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s ease',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '0.35rem'
-                                    }}
-                                >
-                                    <span style={{
-                                        width: '6px',
-                                        height: '6px',
-                                        borderRadius: '50%',
-                                        background: asset === 'XLM' ? '#ff9800' : '#2196f3'
-                                    }}></span>
-                                    {asset}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Wallet Connect Prompt */}
-                    {!wallet.isConnected ? (
-                        <div style={{ textAlign: 'center', padding: '1.5rem 1rem', background: 'rgba(255,255,255,0.01)', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: '8px', marginBottom: '1rem' }}>
-                            <Wallet size={24} style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }} />
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 600, marginBottom: '0.75rem' }}>VUI LÒNG KẾT NỐI VÍ FREIGHTER</div>
-                            <button onClick={onConnect} className="btn-connect" style={{ margin: '0 auto', fontSize: '0.7rem' }}>
-                                <Wallet size={12} />
-                                <span>Connect Freighter</span>
-                            </button>
-                        </div>
-                    ) : (
-                        <form onSubmit={handleSubmit}>
-                            {/* Input details */}
-                            <div style={{ marginBottom: '1rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.25rem', fontWeight: 600 }}>
-                                    <span>
-                                        {activeAction === 'SUPPLY' ? 'Số dư ví khả dụng' 
-                                            : activeAction === 'WITHDRAW' ? 'Tài sản khả dụng để rút'
-                                            : activeAction === 'BORROW' ? 'Giới hạn vay an toàn (80%)'
-                                            : activeAction === 'REPAY' ? 'Số dư nợ đang vay'
-                                            : 'Ví khả dụng (Chỉ XLM)'}
-                                    </span>
-                                    <span style={{ color: 'var(--text-bright)' }}>
-                                        {activeAction === 'SUPPLY' ? `${(userBalances.wallet[activeAsset] || 0).toLocaleString()} ${activeAsset}`
-                                            : activeAction === 'WITHDRAW' ? `${(activeAsset === 'XLM' ? xlmSupplied : usdcSupplied).toFixed(2)} ${activeAsset}`
-                                            : activeAction === 'BORROW' ? `${((currentBorrowPower - currentTotalDebtVal) * 0.80 / reserves[activeAsset].price).toFixed(2)} ${activeAsset}`
-                                            : activeAction === 'REPAY' ? `${(activeAsset === 'XLM' ? xlmDebt : usdcDebt).toFixed(2)} ${activeAsset}`
-                                            : `${(userBalances.wallet.XLM || 0).toLocaleString()} XLM`}
-                                    </span>
-                                </div>
-
-                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        placeholder="0.00"
-                                        value={amountInput}
-                                        onChange={(e) => setAmountInput(e.target.value)}
-                                        style={{
-                                            width: '100%',
-                                            background: 'rgba(0,0,0,0.25)',
-                                            border: '1px solid rgba(255,255,255,0.08)',
-                                            borderRadius: '8px',
-                                            padding: '0.6rem 2.8rem 0.6rem 0.75rem',
-                                            fontSize: '0.9rem',
-                                            fontWeight: 600,
-                                            color: '#fff',
-                                            outline: 'none',
-                                            transition: 'border-color 0.2s ease'
-                                        }}
-                                        onFocus={(e) => e.target.style.borderColor = 'var(--purple)'}
-                                        onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.08)'}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={handleMaxClick}
-                                        style={{
-                                            position: 'absolute',
-                                            right: '0.4rem',
-                                            background: 'rgba(255,255,255,0.05)',
-                                            border: '1px solid rgba(255,255,255,0.08)',
-                                            color: 'var(--cyan)',
-                                            fontSize: '0.6rem',
-                                            fontWeight: 700,
-                                            padding: '0.2rem 0.4rem',
-                                            borderRadius: '4px',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        MAX
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Leverage Factor Selector */}
-                            {activeAction === 'LEVERAGE' && (
-                                <div style={{ marginBottom: '1.25rem', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: '8px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-dim)', fontWeight: 600, marginBottom: '0.5rem' }}>
-                                        <span>HỆ SỐ ĐÒN BẨY (LEVERAGE LOOP)</span>
-                                        <span style={{ color: 'var(--purple)', fontWeight: 700 }}>{leverageVal.toFixed(1)}x</span>
-                                    </div>
-                                    <input 
-                                        type="range" 
-                                        min="1.1" 
-                                        max="3.0" 
-                                        step="0.1" 
-                                        value={leverageVal}
-                                        onChange={(e) => setLeverageVal(parseFloat(e.target.value))}
-                                        style={{
-                                            width: '100%',
-                                            accentColor: 'var(--purple)',
-                                            height: '4px',
-                                            background: 'rgba(255,255,255,0.1)',
-                                            borderRadius: '2px',
-                                            cursor: 'pointer'
-                                        }}
-                                    />
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                                        <span>1.1x (Ít rủi ro)</span>
-                                        <span>2.0x (Tiêu chuẩn)</span>
-                                        <span>3.0x (Tối đa)</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* BEFORE / AFTER SIMULATION CARD */}
-                            <div style={{
-                                background: 'rgba(255,255,255,0.01)',
-                                border: '1px solid rgba(255,255,255,0.03)',
-                                borderRadius: '8px',
-                                padding: '0.65rem',
-                                marginBottom: '1rem',
-                                fontSize: '0.65rem'
-                            }}>
-                                <div style={{ color: 'var(--text-dim)', fontWeight: 700, borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '0.25rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                    <RefreshCw size={10} className="highlight-cyan" />
-                                    MÔ PHỎNG SỨC KHỎE TÀI KHOẢN (PRE-EXECUTION)
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ color: 'var(--text-muted)' }}>Hệ số Sức Khỏe HF:</span>
-                                        <div style={{ display: 'flex', gap: '0.35rem', fontWeight: 600 }}>
-                                            <span style={{ color: 'var(--text-dim)' }}>{healthFactorText(currentHealthFactor)}</span>
-                                            <span style={{ color: 'var(--text-muted)' }}>➔</span>
-                                            <span style={{ color: getHealthFactorColor(simulatedHealthFactor) }}>
-                                                {healthFactorText(simulatedHealthFactor)}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ color: 'var(--text-muted)' }}>Giới hạn Vay đã dùng:</span>
-                                        <div style={{ display: 'flex', gap: '0.35rem', fontWeight: 600 }}>
-                                            <span style={{ color: 'var(--text-dim)' }}>{currentBorrowLimitPercent.toFixed(1)}%</span>
-                                            <span style={{ color: 'var(--text-muted)' }}>➔</span>
-                                            <span style={{ color: simulatedBorrowLimitPercent > 90 ? 'var(--red)' : 'var(--text-bright)' }}>
-                                                {simulatedBorrowLimitPercent.toFixed(1)}%
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ color: 'var(--text-muted)' }}>Số dư Ví khả dụng:</span>
-                                        <div style={{ display: 'flex', gap: '0.35rem', fontWeight: 600 }}>
-                                            <span style={{ color: 'var(--text-dim)' }}>
-                                                {(userBalances.wallet[activeAsset] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                                            </span>
-                                            <span style={{ color: 'var(--text-muted)' }}>➔</span>
-                                            <span style={{ color: 'var(--cyan)' }}>
-                                                {simulatedWalletBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} {activeAsset}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* WARNING BANNERS FOR SAFETY */}
-                            {simulatedHealthFactor < 1.0 && (
-                                <div style={{ display: 'flex', gap: '0.35rem', background: 'rgba(255, 23, 68, 0.05)', border: '1px solid rgba(255, 23, 68, 0.15)', borderRadius: '6px', padding: '0.5rem', color: 'var(--red)', fontSize: '0.62rem', marginBottom: '1rem', lineHeight: '1.25' }}>
-                                    <ShieldAlert size={14} style={{ flexShrink: 0 }} />
-                                    <span>Giao dịch bị Revert! Hệ số sức khỏe HF &lt; 1.0 sẽ kích hoạt thanh lý ngay lập tức. Soroban Smart Contract từ chối thực thi.</span>
-                                </div>
-                            )}
-
-                            {/* Action Button */}
-                            <button
-                                type="submit"
-                                disabled={!isInputValid() || simulatedHealthFactor < 1.0}
-                                style={{
-                                    width: '100%',
-                                    background: isInputValid() ? 'linear-gradient(135deg, var(--purple), #7b2cbf)' : 'rgba(255,255,255,0.03)',
-                                    border: isInputValid() ? 'none' : '1px solid rgba(255,255,255,0.06)',
-                                    color: isInputValid() ? '#fff' : 'var(--text-muted)',
-                                    padding: '0.7rem',
-                                    borderRadius: '8px',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 700,
-                                    cursor: isInputValid() ? 'pointer' : 'not-allowed',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '0.5rem',
-                                    boxShadow: isInputValid() ? '0 4px 15px rgba(155,81,224,0.35)' : 'none',
-                                    transition: 'all 0.2s cubic-bezier(0.1, 0.8, 0.25, 1)'
-                                }}
-                                onMouseEnter={(e) => {
-                                    if (isInputValid()) {
-                                        e.currentTarget.style.filter = 'brightness(1.15)';
-                                        e.currentTarget.style.transform = 'translateY(-1px)';
-                                    }
-                                }}
-                                onMouseLeave={(e) => {
-                                    if (isInputValid()) {
-                                        e.currentTarget.style.filter = 'none';
-                                        e.currentTarget.style.transform = 'none';
-                                    }
-                                }}
-                            >
-                                {activeAction === 'SUPPLY' ? <ArrowUpRight size={14} /> : <ArrowDownLeft size={14} />}
-                                <span>
-                                    {activeAction === 'SUPPLY' ? `NẠP THẾ CHẤP ${activeAsset}`
-                                        : activeAction === 'WITHDRAW' ? `RÚT TÀI SẢN ${activeAsset}`
-                                        : activeAction === 'BORROW' ? `VAY NỢ ${activeAsset}`
-                                        : activeAction === 'REPAY' ? `THANH TOÁN NỢ ${activeAsset}`
-                                        : `THỰC THI LOOP ${leverageVal.toFixed(1)}x XLM`}
-                                </span>
-                            </button>
-                        </form>
-                    )}
-                </div>
+                ) : (
+                    <InteractionPanel
+                        reserves={reserves}
+                        userBalances={userBalances}
+                        activeAction={activeAction}
+                        activeAsset={activeAsset}
+                        onClose={() => {}}
+                        onSubmit={onTransactionSubmit}
+                        onToggleCollateral={onToggleCollateral}
+                        txState={txState}
+                        txDetails={txDetails}
+                        onResetTxState={onResetTxState}
+                        onExtendTtl={onExtendTtl}
+                        showCloseButton={false}
+                    />
+                )}
             </div>
 
             {/* Bottom Row: Soroban Specials Premium Panel */}

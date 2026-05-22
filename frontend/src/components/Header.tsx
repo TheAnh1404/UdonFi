@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wallet, LogOut, LayoutDashboard, Database } from 'lucide-react';
+import { Wallet, LogOut, LayoutDashboard, Database, Coins } from 'lucide-react';
 import type { Reserve } from '../types/lending';
 
 interface HeaderProps {
@@ -7,8 +7,8 @@ interface HeaderProps {
     wallet: { isConnected: boolean; address: string };
     onConnect: () => void;
     onDisconnect: () => void;
-    currentView: 'DASHBOARD' | 'POOLS';
-    onNavigate: (view: 'DASHBOARD' | 'POOLS') => void;
+    currentView: 'DASHBOARD' | 'MARKET' | 'POOLS';
+    onNavigate: (view: 'DASHBOARD' | 'MARKET' | 'POOLS') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
@@ -75,6 +75,28 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                         <LayoutDashboard size={12} />
                         <span>Bảng Điều Khiển</span>
+                    </button>
+                    <button 
+                        onClick={() => onNavigate('MARKET')}
+                        className="nav-btn"
+                        style={{
+                            background: currentView === 'MARKET' ? 'rgba(155, 81, 224, 0.08)' : 'transparent',
+                            border: '1px solid ' + (currentView === 'MARKET' ? 'rgba(155, 81, 224, 0.2)' : 'transparent'),
+                            color: currentView === 'MARKET' ? 'var(--purple)' : 'var(--text-muted)',
+                            padding: '0.35rem 0.75rem',
+                            borderRadius: '6px',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            transition: 'var(--transition-smooth)',
+                            textShadow: currentView === 'MARKET' ? '0 0 8px rgba(155, 81, 224, 0.2)' : 'none'
+                        }}
+                    >
+                        <Coins size={12} />
+                        <span>Thị Trường Tín Dụng</span>
                     </button>
                     <button 
                         onClick={() => onNavigate('POOLS')}

@@ -4,17 +4,12 @@ import { HealthFactorGauge } from './components/HealthFactorGauge';
 import { PositionStats } from './components/PositionStats';
 import { SystemReserves } from './components/SystemReserves';
 import { Footer } from './components/Footer';
-import { MarketTable } from './components/MarketTable';
-import { InteractionPanel } from './components/InteractionPanel';
-import { SorobanBitmap } from './components/SorobanBitmap';
-import { SorobanTtl } from './components/SorobanTtl';
-import { SorobanKinked } from './components/SorobanKinked';
-import { SorobanLiquidation } from './components/SorobanLiquidation';
 import { ConsoleLogger } from './components/ConsoleLogger';
 import { TradingViewChart } from './components/TradingViewChart';
 import { PoolsPage } from './components/PoolsPage.tsx';
+import { CreditMarketPage } from './components/CreditMarketPage.tsx';
 import type { Reserve, UserBalances, LogLine, LiqSandbox, Web3Tx } from './types/lending';
-import { Cpu, Hourglass, AreaChart, ShieldAlert } from 'lucide-react';
+import { Coins, Database } from 'lucide-react';
 
 const INITIAL_RESERVES: Record<'XLM' | 'USDC', Reserve> = {
     XLM: {
@@ -136,14 +131,8 @@ function App() {
     const [userBalances, setUserBalances] = useState<UserBalances>(INITIAL_USER_BALANCES);
     const [wallet, setWallet] = useState({ isConnected: false, address: '' });
     const [logs, setLogs] = useState<LogLine[]>([]);
-    const [currentView, setCurrentView] = useState<'DASHBOARD' | 'POOLS'>('DASHBOARD');
+    const [currentView, setCurrentView] = useState<'DASHBOARD' | 'MARKET' | 'POOLS'>('DASHBOARD');
     const [txHistory, setTxHistory] = useState<Web3Tx[]>(INITIAL_TX_HISTORY);
-    
-    // Tab and modal panel controls
-    const [activeTab, setActiveTab] = useState<'BITMAP' | 'TTL' | 'KINKED' | 'LIQUIDATION'>('BITMAP');
-    const [isInteractionOpen, setIsInteractionOpen] = useState(false);
-    const [activeAction, setActiveAction] = useState<'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE'>('SUPPLY');
-    const [activeAsset, setActiveAsset] = useState<'XLM' | 'USDC'>('XLM');
 
     // Liquidation sandbox state
     const [sandbox, setSandbox] = useState<LiqSandbox>({
@@ -179,7 +168,6 @@ function App() {
             debtScaled: { XLM: 0, USDC: 0 },
             bitmap: 0n
         }));
-        setIsInteractionOpen(false);
         addLog('SYSTEM', 'Đã ngắt kết nối ví Freighter.');
     };
 
@@ -282,21 +270,10 @@ function App() {
         return () => clearInterval(interval);
     }, [wallet.isConnected]);
 
-    // Handle Quick Action Click
-    const handleActionClick = (action: typeof activeAction, asset: typeof activeAsset) => {
-        if (!wallet.isConnected) {
-            handleConnectWallet();
-            return;
-        }
-        setActiveAction(action);
-        setActiveAsset(asset);
-        setIsInteractionOpen(true);
-    };
-
     // Process Transaction Submission
     const handleTransactionSubmit = (
-        action: typeof activeAction,
-        asset: typeof activeAsset,
+        action: 'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE',
+        asset: 'XLM' | 'USDC',
         amount: number,
         leverageFactor?: number
     ) => {
@@ -439,8 +416,6 @@ function App() {
                 ttl: renewedTtl
             };
         });
-        
-        setIsInteractionOpen(false);
     };
 
     // Toggle bitmap bits (Simulate direct contract bitmap updates)
@@ -747,98 +722,154 @@ function App() {
                     {/* System Reserves Pool State - Nằm riêng biệt bên dưới */}
                     <SystemReserves reserves={reserves} onNavigate={() => setCurrentView('POOLS')} />
 
-                    {/* Middle row: Market Table and Interaction Panel */}
-                    <div className="dashboard-row market-row">
-                        <MarketTable
-                            reserves={reserves}
-                            userBalances={userBalances}
-                            onAction={handleActionClick}
-                            onToggleCollateral={handleToggleCollateral}
-                        />
-                        
-                        {isInteractionOpen && (
-                            <InteractionPanel
-                                reserves={reserves}
-                                userBalances={userBalances}
-                                activeAction={activeAction}
-                                activeAsset={activeAsset}
-                                onClose={() => setIsInteractionOpen(false)}
-                                onSubmit={handleTransactionSubmit}
-                                onToggleCollateral={handleToggleCollateral}
-                            />
-                        )}
-                    </div>
-
-                    {/* Bottom Row: Soroban Specials Tabs */}
-                    <div className="card glass-card soroban-row">
-                        <div className="soroban-header">
-                            <div className="tab-pill-container">
-                                <button
-                                    onClick={() => setActiveTab('BITMAP')}
-                                    className={`soroban-tab-btn ${activeTab === 'BITMAP' ? 'active' : ''}`}
-                                >
-                                    <Cpu size={14} />
-                                    <span>128-bit Bitmap Matrix</span>
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('TTL')}
-                                    className={`soroban-tab-btn ${activeTab === 'TTL' ? 'active' : ''}`}
-                                >
-                                    <Hourglass size={14} />
-                                    <span>TTL Storage Life</span>
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('KINKED')}
-                                    className={`soroban-tab-btn ${activeTab === 'KINKED' ? 'active' : ''}`}
-                                >
-                                    <AreaChart size={14} />
-                                    <span>Kinked APY Curve</span>
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('LIQUIDATION')}
-                                    className={`soroban-tab-btn ${activeTab === 'LIQUIDATION' ? 'active' : ''}`}
-                                >
-                                    <ShieldAlert size={14} />
-                                    <span>2-Step Liquidation Sandbox</span>
-                                </button>
+                    {/* DeFi Action Gateway (Tập trung điều hướng) */}
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                        gap: '1.25rem',
+                        marginTop: '1.25rem',
+                        marginBottom: '1.25rem'
+                    }}>
+                        {/* Gateway Card 1: Credit Market */}
+                        <div className="card glass-card" style={{
+                            padding: '1.25rem',
+                            border: '1px solid rgba(155, 81, 224, 0.15)',
+                            boxShadow: '0 8px 32px rgba(155, 81, 224, 0.03)',
+                            position: 'relative',
+                            overflow: 'hidden',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            minHeight: '180px'
+                        }}>
+                            <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                    <div style={{
+                                        background: 'rgba(155, 81, 224, 0.1)',
+                                        border: '1px solid rgba(155, 81, 224, 0.2)',
+                                        padding: '0.4rem',
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: 'var(--purple)',
+                                        boxShadow: '0 0 10px rgba(155,81,224,0.15)'
+                                    }}>
+                                        <Coins size={18} />
+                                    </div>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-bright)', letterSpacing: '0.05em' }}>THỊ TRƯỜNG TÍN DỤNG UDONFI</span>
+                                </div>
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: '1.45', margin: 0 }}>
+                                    Không gian thao tác DeFi chuyên biệt. Thực hiện nạp tài sản thế chấp (Supply), vay nợ an toàn (Borrow), quản lý rủi ro vị thế với Health Factor Gauge, và truy cập các tác vụ cấu trúc Soroban nâng cao.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setCurrentView('MARKET')}
+                                style={{
+                                    width: '100%',
+                                    background: 'linear-gradient(135deg, var(--purple), #7b2cbf)',
+                                    border: 'none',
+                                    color: '#fff',
+                                    borderRadius: '8px',
+                                    padding: '0.6rem',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.35rem',
+                                    marginTop: '1rem',
+                                    boxShadow: '0 4px 12px rgba(155,81,224,0.3)',
+                                    transition: 'var(--transition-smooth)'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(1.15)'}
+                                onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}
+                            >
+                                <Coins size={12} />
+                                <span>Bắt Đầu Giao Dịch & Vay Vốn ↗</span>
+                            </button>
+                            <div style={{ position: 'absolute', right: '-15px', bottom: '-15px', opacity: 0.02, pointerEvents: 'none' }}>
+                                <Coins size={120} color="var(--purple)" />
                             </div>
                         </div>
-                        <div className="card-body">
-                            {activeTab === 'BITMAP' && (
-                                <SorobanBitmap
-                                    bitmap={userBalances.bitmap}
-                                    onToggleBit={handleToggleBit}
-                                />
-                            )}
-                            {activeTab === 'TTL' && (
-                                <SorobanTtl
-                                    ttl={userBalances.ttl}
-                                    currentLedger={userBalances.currentLedger}
-                                    onExtendTtl={handleExtendTtl}
-                                />
-                            )}
-                            {activeTab === 'KINKED' && (
-                                <SorobanKinked reserves={reserves} />
-                            )}
-                            {activeTab === 'LIQUIDATION' && (
-                                <SorobanLiquidation
-                                    reserves={reserves}
-                                    sandbox={{
-                                        ...sandbox,
-                                        supplyXLM: isRealP2PActive ? xlmSupplied : sandbox.supplyXLM,
-                                        borrowUSDC: isRealP2PActive ? usdcDebt : sandbox.borrowUSDC
-                                    }}
-                                    isRealP2P={isRealP2PActive}
-                                    onSlidePrice={handleSlideSandboxPrice}
-                                    onToggleAutoKeeper={handleToggleAutoKeeper}
-                                    onPrepare={handlePrepareLiquidation}
-                                    onExecute={handleExecuteLiquidation}
-                                    onReset={handleResetSandbox}
-                                />
-                            )}
+
+                        {/* Gateway Card 2: Pools Detail */}
+                        <div className="card glass-card" style={{
+                            padding: '1.25rem',
+                            border: '1px solid rgba(0, 242, 254, 0.15)',
+                            boxShadow: '0 8px 32px rgba(0, 242, 254, 0.03)',
+                            position: 'relative',
+                            overflow: 'hidden',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            minHeight: '180px'
+                        }}>
+                            <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                    <div style={{
+                                        background: 'rgba(0, 242, 254, 0.1)',
+                                        border: '1px solid rgba(0, 242, 254, 0.2)',
+                                        padding: '0.4rem',
+                                        borderRadius: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: 'var(--cyan)',
+                                        boxShadow: '0 0 10px rgba(0,242,254,0.15)'
+                                    }}>
+                                        <Database size={18} />
+                                    </div>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-bright)', letterSpacing: '0.05em' }}>HỆ THỐNG BỂ THANH KHOẢN (POOLS)</span>
+                                </div>
+                                <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: '1.45', margin: 0 }}>
+                                    Trung tâm phân tích tài chính sâu rộng. Quan sát biểu đồ Kinked APY Curve phi tuyến tính theo thời gian thực, giám sát sổ cái dòng tiền Web3 Flow Ledger liên thông trực tiếp, và trải nghiệm mô phỏng thanh lý 2 bước.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setCurrentView('POOLS')}
+                                style={{
+                                    width: '100%',
+                                    background: 'linear-gradient(135deg, var(--cyan), #00b4d8)',
+                                    border: 'none',
+                                    color: '#070a13',
+                                    borderRadius: '8px',
+                                    padding: '0.6rem',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '0.35rem',
+                                    marginTop: '1rem',
+                                    boxShadow: '0 4px 12px rgba(0,242,254,0.3)',
+                                    transition: 'var(--transition-smooth)'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(1.15)'}
+                                onMouseLeave={(e) => e.currentTarget.style.filter = 'none'}
+                            >
+                                <Database size={12} />
+                                <span>Khám Phá Các Bể Thanh Khoản ↗</span>
+                            </button>
+                            <div style={{ position: 'absolute', right: '-15px', bottom: '-15px', opacity: 0.02, pointerEvents: 'none' }}>
+                                <Database size={120} color="var(--cyan)" />
+                            </div>
                         </div>
                     </div>
                 </>
+            ) : currentView === 'MARKET' ? (
+                <CreditMarketPage
+                    reserves={reserves}
+                    userBalances={userBalances}
+                    wallet={wallet}
+                    onConnect={handleConnectWallet}
+                    onTransactionSubmit={handleTransactionSubmit}
+                    onToggleCollateral={handleToggleCollateral}
+                    onToggleBit={handleToggleBit}
+                    onExtendTtl={handleExtendTtl}
+                />
             ) : (
                 <PoolsPage
                     reserves={reserves}

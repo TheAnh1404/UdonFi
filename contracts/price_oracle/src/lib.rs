@@ -159,7 +159,7 @@ impl PriceOracleContract {
             .storage()
             .persistent()
             .get(&OracleDataKey::LastPrice(asset.clone()))
-            .unwrap_or(WAD); // Default to $1.00 if no price set
+            .expect("Oracle price unavailable");
 
         if price <= 0 {
             panic!("invalid oracle price");
@@ -298,7 +298,8 @@ mod test {
     }
 
     #[test]
-    fn test_default_price() {
+    #[should_panic(expected = "Oracle price unavailable")]
+    fn test_default_price_fails() {
         let env = Env::default();
         env.mock_all_auths();
 
@@ -311,8 +312,7 @@ mod test {
 
         client.initialize(&admin, &reflector);
 
-        // Unknown asset defaults to WAD ($1.00)
-        assert_eq!(client.get_price_usd(&unknown), WAD);
+        client.get_price_usd(&unknown);
     }
 
     #[test]

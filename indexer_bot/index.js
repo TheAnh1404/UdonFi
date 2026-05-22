@@ -4,11 +4,14 @@
 const { rpc, scValToNative } = require('@stellar/stellar-sdk');
 const express = require('express');
 const { Server: SocketIOServer } = require('socket.io');
+const fs = require('fs');
+const path = require('path');
 
 // Config
 const POOL_CONTRACT_ID = process.env.POOL_CONTRACT_ID || 'CAQRYQXLNBFXCKNCN3UIVGL2OCR6EL3QURZ56ZC2B4YMPYY6JAVXLBBH';
 const RPC_URL = process.env.SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
 const sorobanServer = new rpc.Server(RPC_URL);
+const STATE_FILE_PATH = path.join(__dirname, 'state.json');
 
 const app = express();
 const http = require('http').createServer(app);
@@ -28,18 +31,52 @@ console.log('🚀 UdonFi Realtime Soroban Indexer Bot started');
 
 let startLedger = null;
 
+// Load persisted state if it exists
+if (fs.existsSync(STATE_FILE_PATH)) {
+    try {
+        const fileContent = fs.readFileSync(STATE_FILE_PATH, 'utf8');
+        const data = JSON.parse(fileContent);
+        if (data.state) {
+            state = data.state;
+        }
+        if (data.startLedger !== undefined && data.startLedger !== null) {
+            startLedger = Number(data.startLedger);
+            console.log(`💾 Loaded persisted state and startLedger sequence: ${startLedger}`);
+        }
+    } catch (err) {
+        console.error('❌ Failed to load persisted state:', err.message);
+    }
+}
+
+function saveState() {
+    try {
+        const data = {
+            state,
+            startLedger
+        };
+        fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(data, null, 2), 'utf8');
+    } catch (err) {
+        console.error('❌ Failed to persist state:', err.message);
+    }
+}
+
 // Polling Soroban Events from RPC
 async function pollSorobanEvents() {
     console.log(`📡 Listening for Soroban events on contract: ${POOL_CONTRACT_ID}...`);
     
-    try {
-        const latestLedgerObj = await sorobanServer.getLatestLedger();
-        startLedger = latestLedgerObj.sequence;
-        console.log(`📈 Indexing started from ledger sequence: ${startLedger}`);
-    } catch (err) {
-        console.error('❌ Failed to fetch latest ledger from RPC. Retrying in 5s...', err.message);
-        setTimeout(pollSorobanEvents, 5000);
-        return;
+    if (startLedger === null) {
+        try {
+            const latestLedgerObj = await sorobanServer.getLatestLedger();
+            startLedger = latestLedgerObj.sequence;
+            console.log(`📈 Indexing started from latest ledger sequence: ${startLedger}`);
+            saveState();
+        } catch (err) {
+            console.error('❌ Failed to fetch latest ledger from RPC. Retrying in 5s...', err.message);
+            setTimeout(pollSorobanEvents, 5000);
+            return;
+        }
+    } else {
+        console.log(`📈 Indexing starting from loaded ledger sequence: ${startLedger}`);
     }
 
     setInterval(async () => {
@@ -98,9 +135,13 @@ async function pollSorobanEvents() {
 
                 // Advance pointer past processed events
                 startLedger = maxLedger + 1;
+                saveState();
             } else {
                 // Advance pointer to the latest network ledger to keep up
-                startLedger = currentLatest.sequence;
+                if (startLedger !== currentLatest.sequence) {
+                    startLedger = currentLatest.sequence;
+                    saveState();
+                }
             }
         } catch (err) {
             console.error('⚠️ Error polling Soroban events:', err.message);

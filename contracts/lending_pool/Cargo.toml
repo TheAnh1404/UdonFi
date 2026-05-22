@@ -12,3 +12,5 @@ udonfi-common = { path = "../common" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+udonfi-a-token = { path = "../a_token" }
+udonfi-debt-token = { path = "../debt_token" }

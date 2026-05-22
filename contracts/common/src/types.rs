@@ -35,6 +35,10 @@ pub enum PoolDataKey {
     Treasury,
     /// Pause flag for emergency
     Paused,
+    /// Registered Liquidation Engine address
+    LiquidationEngine,
+    /// Bad debt deficit per reserve index
+    ReserveDeficit(u32),
 }
 
 /// Storage keys for individual Reserve contracts.

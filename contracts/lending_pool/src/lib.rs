@@ -30,6 +30,23 @@ use udonfi_common::{
 };
 
 // ─────────────────────────────────────────────
+// Cross-Contract Client Interfaces
+// ─────────────────────────────────────────────
+#[soroban_sdk::contractclient(name = "ATokenClient")]
+pub trait ATokenInterface {
+    fn mint(env: Env, to: Address, scaled_amount: i128);
+    fn burn(env: Env, from: Address, scaled_amount: i128);
+    fn scaled_balance_of(env: Env, id: Address) -> i128;
+}
+
+#[soroban_sdk::contractclient(name = "DebtTokenClient")]
+pub trait DebtTokenInterface {
+    fn mint(env: Env, to: Address, scaled_amount: i128);
+    fn burn(env: Env, from: Address, scaled_amount: i128);
+    fn scaled_balance_of(env: Env, id: Address) -> i128;
+}
+
+// ─────────────────────────────────────────────
 // Internal storage key for rate configs
 // ─────────────────────────────────────────────
 #[contracttype]
@@ -165,6 +182,17 @@ impl LendingPoolContract {
             .set(&PoolDataKey::Paused, &paused);
     }
 
+    /// Register the Liquidation Engine contract address. Only callable by admin.
+    pub fn set_liquidation_engine(env: Env, address: Address) {
+        Self::require_admin(&env);
+        env.storage()
+            .instance()
+            .set(&PoolDataKey::LiquidationEngine, &address);
+        env.storage()
+            .instance()
+            .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+
     // ══════════════════════════════════════════
     // Core User Operations
     // ══════════════════════════════════════════
@@ -229,6 +257,10 @@ impl LendingPoolContract {
         env.storage()
             .persistent()
             .extend_ttl(&balance_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+        // Propagate mint to external aToken contract
+        let a_token_client = ATokenClient::new(&env, &config.a_token);
+        a_token_client.mint(&caller, &scaled_amount);
 
         // Step 5: Update total scaled deposits
         let total_key = PoolDataKey::ReserveByIndex(reserve_index);
@@ -313,6 +345,10 @@ impl LendingPoolContract {
         env.storage()
             .persistent()
             .extend_ttl(&balance_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+        // Propagate burn to external aToken contract
+        let a_token_client = ATokenClient::new(&env, &config.a_token);
+        a_token_client.burn(&caller, &scaled_to_burn);
 
         // Update total deposits
         Self::update_pool_total_deposits(&env, reserve_index, scaled_to_burn, false);
@@ -403,6 +439,10 @@ impl LendingPoolContract {
         env.storage()
             .persistent()
             .extend_ttl(&debt_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+        // Propagate mint to external debtToken contract
+        let debt_token_client = DebtTokenClient::new(&env, &config.debt_token);
+        debt_token_client.mint(&caller, &scaled_debt);
 
         // Set borrowing flag
         let mut bitmap = Self::get_user_bitmap(&env, &caller);
@@ -506,6 +546,11 @@ impl LendingPoolContract {
         env.storage()
             .persistent()
             .extend_ttl(&debt_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+        // Propagate burn to external debtToken contract
+        let config = Self::get_reserve_config(&env, reserve_index);
+        let debt_token_client = DebtTokenClient::new(&env, &config.debt_token);
+        debt_token_client.burn(&caller, &actual_burn);
 
         // Update total borrows
         Self::update_pool_total_borrows(&env, reserve_index, actual_burn, false);
@@ -754,6 +799,226 @@ impl LendingPoolContract {
     /// Get total borrows in a reserve pool.
     pub fn get_pool_total_borrows(env: Env, asset: Address) -> i128 {
         Self::read_pool_total_borrows_for_asset(&env, &asset)
+    }
+
+    /// Get accumulated bad debt deficit for an asset reserve.
+    pub fn get_reserve_deficit(env: Env, asset: Address) -> i128 {
+        let reserve_index = Self::get_reserve_index(&env, &asset);
+        let deficit_key = PoolDataKey::ReserveDeficit(reserve_index);
+        env.storage().persistent().get(&deficit_key).unwrap_or(0)
+    }
+
+    /// Liquidation Hook called ONLY by the authorized Liquidation Engine.
+    /// Performs internal state changes, burns corresponding user aTokens and debtTokens,
+    /// transfers the underlying collateral from pool to liquidator,
+    /// and handles bad debt socialization.
+    pub fn liquidation_hook(
+        env: Env,
+        liquidator: Address,
+        borrower: Address,
+        debt_asset: Address,
+        collateral_asset: Address,
+        debt_to_repay: i128,
+        collateral_to_seize: i128,
+    ) {
+        // Authenticate the caller is the registered Liquidation Engine
+        let liquidation_engine: Address = env
+            .storage()
+            .instance()
+            .get(&PoolDataKey::LiquidationEngine)
+            .expect("liquidation engine not registered");
+        liquidation_engine.require_auth();
+
+        Self::require_not_paused(&env);
+
+        if debt_to_repay <= 0 || collateral_to_seize <= 0 {
+            panic!("invalid liquidation hook amounts");
+        }
+
+        // Transfer the seized collateral from LendingPool to liquidator
+        let collateral_token = token::Client::new(&env, &collateral_asset);
+        collateral_token.transfer(
+            &env.current_contract_address(),
+            &liquidator,
+            &collateral_to_seize,
+        );
+
+        let debt_index = Self::get_reserve_index(&env, &debt_asset);
+        let collateral_index = Self::get_reserve_index(&env, &collateral_asset);
+
+        // Accrue interest for both reserves to ensure index correctness
+        let (_, debt_borrow_index) = Self::update_reserve_indices_full(&env, debt_index);
+        let collateral_liquidity_index = Self::update_reserve_indices(&env, collateral_index);
+
+        // ─────────────────────────────────────────────
+        // 1. Process Debt Repayment
+        // ─────────────────────────────────────────────
+        let debt_config = Self::get_reserve_config(&env, debt_index);
+        let debt_key = PoolDataKey::UserDebtBalance(borrower.clone(), debt_index);
+        let current_scaled_debt: i128 = env
+            .storage()
+            .persistent()
+            .get(&debt_key)
+            .unwrap_or(0);
+
+        if current_scaled_debt > 0 {
+            let repay_ray = debt_to_repay.checked_mul(RAY).expect("overflow");
+            let scaled_debt_to_burn = repay_ray / debt_borrow_index;
+            let actual_debt_burn = if scaled_debt_to_burn > current_scaled_debt {
+                current_scaled_debt
+            } else {
+                scaled_debt_to_burn
+            };
+
+            let new_scaled_debt = current_scaled_debt - actual_debt_burn;
+            env.storage()
+                .persistent()
+                .set(&debt_key, &new_scaled_debt);
+            env.storage()
+                .persistent()
+                .extend_ttl(&debt_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+            // Update pool total borrows
+            Self::update_pool_total_borrows(&env, debt_index, actual_debt_burn, false);
+
+            // Propagate burn to debt token contract
+            let debt_token_client = DebtTokenClient::new(&env, &debt_config.debt_token);
+            debt_token_client.burn(&borrower, &actual_debt_burn);
+
+            // Clear borrowing flag if fully repaid
+            if new_scaled_debt == 0 {
+                let mut bitmap = Self::get_user_bitmap(&env, &borrower);
+                set_borrowing(&mut bitmap, debt_index as u8, false);
+                Self::set_user_bitmap(&env, &borrower, bitmap);
+            }
+        }
+
+        // ─────────────────────────────────────────────
+        // 2. Process Collateral Seizure
+        // ─────────────────────────────────────────────
+        let collateral_config = Self::get_reserve_config(&env, collateral_index);
+        let balance_key = PoolDataKey::UserATokenBalance(borrower.clone(), collateral_index);
+        let current_scaled_collateral: i128 = env
+            .storage()
+            .persistent()
+            .get(&balance_key)
+            .unwrap_or(0);
+
+        let mut actual_collateral_burn = 0i128;
+        if current_scaled_collateral > 0 {
+            let seize_ray = collateral_to_seize.checked_mul(RAY).expect("overflow");
+            let scaled_collateral_to_burn = seize_ray / collateral_liquidity_index;
+            actual_collateral_burn = if scaled_collateral_to_burn > current_scaled_collateral {
+                current_scaled_collateral
+            } else {
+                scaled_collateral_to_burn
+            };
+
+            let new_scaled_collateral = current_scaled_collateral - actual_collateral_burn;
+            env.storage()
+                .persistent()
+                .set(&balance_key, &new_scaled_collateral);
+            env.storage()
+                .persistent()
+                .extend_ttl(&balance_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+            // Update pool total deposits
+            Self::update_pool_total_deposits(&env, collateral_index, actual_collateral_burn, false);
+
+            // Propagate burn to aToken contract
+            let a_token_client = ATokenClient::new(&env, &collateral_config.a_token);
+            a_token_client.burn(&borrower, &actual_collateral_burn);
+
+            // Clear collateral flag if fully depleted
+            if new_scaled_collateral == 0 {
+                let mut bitmap = Self::get_user_bitmap(&env, &borrower);
+                set_using_as_collateral(&mut bitmap, collateral_index as u8, false);
+                Self::set_user_bitmap(&env, &borrower, bitmap);
+            }
+        }
+
+        // ─────────────────────────────────────────────
+        // 3. Bad Debt Socialization
+        // ─────────────────────────────────────────────
+        // If the borrower's collateral for this asset is completely wiped out,
+        // check if they have any remaining collateral across ALL other reserves.
+        // If they have 0 total collateral left but still have outstanding debt,
+        // it means they are undercollateralized/unbacked.
+        // We wipe their outstanding debt and record it as a ReserveDeficit.
+        let mut bitmap = Self::get_user_bitmap(&env, &borrower);
+        let current_scaled_collateral: i128 = env
+            .storage()
+            .persistent()
+            .get(&balance_key)
+            .unwrap_or(0);
+
+        if current_scaled_collateral == 0 {
+            let reserve_count = Self::get_reserve_count(env.clone());
+            let mut has_any_collateral = false;
+            for i in 0..reserve_count {
+                if is_using_as_collateral(bitmap, i as u8) {
+                    let other_bal_key = PoolDataKey::UserATokenBalance(borrower.clone(), i);
+                    let other_scaled: i128 = env.storage().persistent().get(&other_bal_key).unwrap_or(0);
+                    if other_scaled > 0 {
+                        has_any_collateral = true;
+                        break;
+                    }
+                }
+            }
+
+            if !has_any_collateral {
+                // Borrower has absolutely NO collateral remaining.
+                // Any outstanding debts are unbacked bad debt. We wipe them.
+                for i in 0..reserve_count {
+                    if is_borrowing(bitmap, i as u8) {
+                        let user_debt_key = PoolDataKey::UserDebtBalance(borrower.clone(), i);
+                        let outstanding_scaled: i128 = env
+                            .storage()
+                            .persistent()
+                            .get(&user_debt_key)
+                            .unwrap_or(0);
+
+                        if outstanding_scaled > 0 {
+                            let r_config = Self::get_reserve_config(&env, i);
+                            let borrow_index = Self::get_stored_borrow_index(&env, i);
+                            let actual_bad_debt = ray_mul(outstanding_scaled, borrow_index).unwrap_or(0);
+
+                            // Record protocol deficit
+                            let deficit_key = PoolDataKey::ReserveDeficit(i);
+                            let current_deficit: i128 = env.storage().persistent().get(&deficit_key).unwrap_or(0);
+                            env.storage().persistent().set(&deficit_key, &(current_deficit + actual_bad_debt));
+                            env.storage().persistent().extend_ttl(&deficit_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+
+                            // Wipe user's internal debt balance in pool
+                            env.storage().persistent().set(&user_debt_key, &0i128);
+
+                            // Update total borrows
+                            Self::update_pool_total_borrows(&env, i, outstanding_scaled, false);
+
+                            // Burn from external debt token contract
+                            let debt_token_client = DebtTokenClient::new(&env, &r_config.debt_token);
+                            debt_token_client.burn(&borrower, &outstanding_scaled);
+
+                            env.events().publish(
+                                (symbol_short!("bad_debt"), borrower.clone(), r_config.asset),
+                                actual_bad_debt,
+                            );
+                        }
+                    }
+                }
+
+                // Completely clear all borrow flags in user's config bitmap
+                let mut new_bitmap = bitmap;
+                for i in 0..64 {
+                    set_borrowing(&mut new_bitmap, i as u8, false);
+                }
+                Self::set_user_bitmap(&env, &borrower, new_bitmap);
+            }
+        }
+
+        env.storage()
+            .instance()
+            .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
     // ══════════════════════════════════════════
@@ -1086,6 +1351,8 @@ mod test {
         token::{StellarAssetClient, TokenClient},
         Env,
     };
+    use udonfi_a_token::ATokenContract;
+    use udonfi_debt_token::DebtTokenContract;
 
     fn setup_pool(env: &Env) -> (Address, LendingPoolContractClient<'_>) {
         let contract_id = env.register(LendingPoolContract, ());
@@ -1098,6 +1365,60 @@ mod test {
         client.initialize(&admin, &oracle, &treasury);
 
         (contract_id, client)
+    }
+
+    fn setup_reserve_with_tokens(
+        env: &Env,
+        pool_id: &Address,
+        client: &LendingPoolContractClient<'_>,
+        asset: &Address,
+    ) -> (Address, Address) {
+        let a_token = env.register(ATokenContract, ());
+        let debt_token = env.register(DebtTokenContract, ());
+
+        let a_token_client = udonfi_a_token::ATokenContractClient::new(env, &a_token);
+        a_token_client.initialize(
+            pool_id,
+            asset,
+            &0u32,
+            &soroban_sdk::String::from_str(env, "aToken"),
+            &symbol_short!("aToken"),
+            &7u32,
+        );
+
+        let debt_token_client = udonfi_debt_token::DebtTokenContractClient::new(env, &debt_token);
+        debt_token_client.initialize(
+            pool_id,
+            asset,
+            &0u32,
+            &soroban_sdk::String::from_str(env, "debtToken"),
+            &symbol_short!("debtToken"),
+            &7u32,
+        );
+
+        let config = ReserveConfig {
+            asset: asset.clone(),
+            a_token: a_token.clone(),
+            debt_token: debt_token.clone(),
+            ltv: 7500,
+            liquidation_threshold: 8000,
+            liquidation_bonus: 500,
+            reserve_factor: 1000,
+            decimals: 7,
+            is_active: true,
+            is_borrowing_enabled: true,
+            reserve_index: 0,
+        };
+        let rate_config = InterestRateConfig {
+            optimal_utilization: WAD * 80 / 100,
+            base_rate: WAD * 2 / 100,
+            slope1: WAD * 4 / 100,
+            slope2: WAD * 300 / 100,
+        };
+
+        client.add_reserve(&config, &rate_config);
+
+        (a_token, debt_token)
     }
 
     #[test]
@@ -1166,28 +1487,8 @@ mod test {
         let user = Address::generate(&env);
         token_admin.mint(&user, &10_000_0000000i128); // 10,000 with 7 decimals
 
-        // Add reserve
-        let config = ReserveConfig {
-            asset: asset.clone(),
-            a_token: Address::generate(&env),
-            debt_token: Address::generate(&env),
-            ltv: 7500,
-            liquidation_threshold: 8000,
-            liquidation_bonus: 500,
-            reserve_factor: 1000,
-            decimals: 7,
-            is_active: true,
-            is_borrowing_enabled: true,
-            reserve_index: 0,
-        };
-        let rate_config = InterestRateConfig {
-            optimal_utilization: WAD * 80 / 100,
-            base_rate: WAD * 2 / 100,
-            slope1: WAD * 4 / 100,
-            slope2: WAD * 300 / 100,
-        };
-
-        client.add_reserve(&config, &rate_config);
+        // Setup reserve with real tokens
+        setup_reserve_with_tokens(&env, &pool_id, &client, &asset);
 
         // Supply 1000 tokens
         let supply_amount = 1000_0000000i128;
@@ -1226,7 +1527,7 @@ mod test {
         let env = Env::default();
         env.mock_all_auths();
 
-        let (_, client) = setup_pool(&env);
+        let (pool_id, client) = setup_pool(&env);
 
         let admin = Address::generate(&env);
         let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
@@ -1236,27 +1537,8 @@ mod test {
         let user = Address::generate(&env);
         token_admin.mint(&user, &10_000_0000000i128);
 
-        let config = ReserveConfig {
-            asset: asset.clone(),
-            a_token: Address::generate(&env),
-            debt_token: Address::generate(&env),
-            ltv: 7500,
-            liquidation_threshold: 8000,
-            liquidation_bonus: 500,
-            reserve_factor: 1000,
-            decimals: 7,
-            is_active: true,
-            is_borrowing_enabled: true,
-            reserve_index: 0,
-        };
-        let rate_config = InterestRateConfig {
-            optimal_utilization: WAD * 80 / 100,
-            base_rate: WAD * 2 / 100,
-            slope1: WAD * 4 / 100,
-            slope2: WAD * 300 / 100,
-        };
-
-        client.add_reserve(&config, &rate_config);
+        // Setup reserve with real tokens
+        setup_reserve_with_tokens(&env, &pool_id, &client, &asset);
 
         // Supply first
         client.supply(&user, &asset, &1000_0000000i128);
@@ -1293,27 +1575,8 @@ mod test {
         token_admin.mint(&user, &10_000_0000000i128);
         token_admin.mint(&pool_id, &10_000_0000000i128); // Give pool some liquidity to borrow
 
-        let config = ReserveConfig {
-            asset: asset.clone(),
-            a_token: Address::generate(&env),
-            debt_token: Address::generate(&env),
-            ltv: 7500,
-            liquidation_threshold: 8000,
-            liquidation_bonus: 500,
-            reserve_factor: 1000,
-            decimals: 7,
-            is_active: true,
-            is_borrowing_enabled: true,
-            reserve_index: 0,
-        };
-        let rate_config = InterestRateConfig {
-            optimal_utilization: WAD * 80 / 100,
-            base_rate: WAD * 2 / 100,
-            slope1: WAD * 4 / 100,
-            slope2: WAD * 300 / 100,
-        };
-
-        client.add_reserve(&config, &rate_config);
+        // Setup reserve with real tokens
+        setup_reserve_with_tokens(&env, &pool_id, &client, &asset);
 
         // Supply 1000
         client.supply(&user, &asset, &1000_0000000i128);

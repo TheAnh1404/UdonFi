@@ -159,9 +159,36 @@ impl LiquidationContract {
             }
         }
 
+        // Fetch borrower's actual collateral balance from pool to apply proportional capping
+        let collateral_balance_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
+            &pool,
+            &soroban_sdk::Symbol::new(&env, "get_user_deposit"),
+            soroban_sdk::vec![
+                &env,
+                borrower.clone().into_val(&env),
+                collateral_asset.clone().into_val(&env),
+            ]
+        );
+        let mut collateral_balance = 0i128;
+        if let Ok(Ok(bal)) = collateral_balance_res {
+            collateral_balance = bal;
+        }
+
         let debt_value = wad_mul(debt_to_cover, debt_price).expect("overflow");
         let seized_value = wad_mul(debt_value, bonus_factor).expect("overflow");
-        let collateral_to_seize = wad_div(seized_value, collateral_price).expect("overflow");
+        let mut collateral_to_seize = wad_div(seized_value, collateral_price).expect("overflow");
+
+        let mut actual_debt_to_cover = debt_to_cover;
+
+        if collateral_to_seize > collateral_balance {
+            collateral_to_seize = collateral_balance;
+            
+            // Recalculate debt_to_cover to match the seized collateral:
+            // debt_to_cover = (collateral_to_seize * collateral_price) / (debt_price * bonus_factor)
+            let raw_seized_value = wad_mul(collateral_to_seize, collateral_price).expect("overflow");
+            let raw_debt_value = wad_div(raw_seized_value, bonus_factor).expect("overflow");
+            actual_debt_to_cover = wad_div(raw_debt_value, debt_price).expect("overflow");
+        }
 
         // Generate a unique session ID
         let session_id = env.crypto().sha256(
@@ -183,7 +210,7 @@ impl LiquidationContract {
             borrower: borrower.clone(),
             debt_asset: debt_asset.clone(),
             collateral_asset: collateral_asset.clone(),
-            debt_to_cover,
+            debt_to_cover: actual_debt_to_cover,
             collateral_to_seize,
             liquidation_bonus,
             created_at_ledger: env.ledger().sequence(),
@@ -207,7 +234,7 @@ impl LiquidationContract {
 
         env.events().publish(
             (symbol_short!("liq_prp"), borrower, liquidator),
-            debt_to_cover,
+            actual_debt_to_cover,
         );
 
         session_id_32
@@ -256,9 +283,23 @@ impl LiquidationContract {
         let debt_token = token::Client::new(&env, &params.debt_asset);
         debt_token.transfer(&liquidator, &pool, &params.debt_to_cover);
 
-        // 2. Pool transfers collateral to liquidator (with bonus)
-        let collateral_token = token::Client::new(&env, &params.collateral_asset);
-        collateral_token.transfer(&pool, &params.liquidator, &params.collateral_to_seize);
+        // Call pool hook to process actual updates, burn, transfer collateral, etc.
+        let pool_res = env.try_invoke_contract::<(), soroban_sdk::Error>(
+            &pool,
+            &soroban_sdk::Symbol::new(&env, "liquidation_hook"),
+            soroban_sdk::vec![
+                &env,
+                params.liquidator.clone().into_val(&env),
+                params.borrower.clone().into_val(&env),
+                params.debt_asset.clone().into_val(&env),
+                params.collateral_asset.clone().into_val(&env),
+                params.debt_to_cover.into_val(&env),
+                params.collateral_to_seize.into_val(&env),
+            ]
+        );
+        if pool_res.is_err() {
+            panic!("liquidation pool hook failed");
+        }
 
         // Clean up session
         env.storage().temporary().remove(
@@ -316,7 +357,49 @@ impl LiquidationContract {
 #[cfg(test)]
 mod test {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Env};
+    use soroban_sdk::{contract, contractimpl, testutils::Address as _, Env};
+
+    #[contract]
+    pub struct MockPoolContract;
+
+    #[contractimpl]
+    impl MockPoolContract {
+        pub fn get_health_factor(env: Env, _user: Address) -> i128 {
+            WAD / 2 // 0.5 (under 1.0)
+        }
+        pub fn get_reserve_info(env: Env, asset: Address) -> ReserveConfig {
+            ReserveConfig {
+                asset: asset.clone(),
+                a_token: Address::generate(&env),
+                debt_token: Address::generate(&env),
+                ltv: 7500,
+                liquidation_threshold: 8000,
+                liquidation_bonus: 500,
+                reserve_factor: 1000,
+                decimals: 7,
+                is_active: true,
+                is_borrowing_enabled: true,
+                reserve_index: 0,
+            }
+        }
+        pub fn oracle(env: Env) -> Address {
+            Address::generate(&env)
+        }
+        pub fn get_user_deposit(env: Env, _user: Address, _asset: Address) -> i128 {
+            100_000
+        }
+        pub fn liquidation_hook(
+            _env: Env,
+            _liquidator: Address,
+            _borrower: Address,
+            _debt_asset: Address,
+            _collateral_asset: Address,
+            _debt_to_repay: i128,
+            _collateral_to_seize: i128,
+        ) {
+            // Mock hook does nothing
+        }
+    }
 
     #[test]
     fn test_initialize() {
@@ -342,7 +425,7 @@ mod test {
         let client = LiquidationContractClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
-        let pool = Address::generate(&env);
+        let pool = env.register(MockPoolContract, ());
         let liquidator = Address::generate(&env);
         let borrower = Address::generate(&env);
         let debt_asset = Address::generate(&env);
@@ -366,6 +449,50 @@ mod test {
         // Collateral to seize should be 1000 * 1.05 = 1050 (5% bonus)
         assert_eq!(params.collateral_to_seize, 1050);
         assert_eq!(params.liquidation_bonus, 500);
+    }
+
+    #[test]
+    fn test_execute_liquidation() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        // Register dummy debt asset contract (Stellar Asset Contract) to allow `debt_token.transfer`
+        let admin = Address::generate(&env);
+        let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
+        let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_contract.address());
+        let debt_asset = token_contract.address();
+
+        let contract_id = env.register(LiquidationContract, ());
+        let client = LiquidationContractClient::new(&env, &contract_id);
+
+        let pool = env.register(MockPoolContract, ());
+        let liquidator = Address::generate(&env);
+        let borrower = Address::generate(&env);
+        let collateral_asset = Address::generate(&env);
+
+        client.initialize(&admin, &pool);
+
+        // Mint some debt assets to liquidator so they can transfer it
+        token_admin.mint(&liquidator, &10000);
+
+        let session_id = client.prepare_liquidation(
+            &liquidator,
+            &borrower,
+            &debt_asset,
+            &collateral_asset,
+            &1000i128,
+        );
+
+        client.execute_liquidation(&liquidator, &session_id);
+
+        // Session should be removed
+        // Trying to get it should panic
+        let get_res = env.try_invoke_contract::<LiquidationParams, soroban_sdk::Error>(
+            &contract_id,
+            &soroban_sdk::Symbol::new(&env, "get_session"),
+            soroban_sdk::vec![&env, session_id.into_val(&env)]
+        );
+        assert!(get_res.is_err());
     }
 
     #[test]

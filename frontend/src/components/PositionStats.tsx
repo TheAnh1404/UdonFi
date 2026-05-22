@@ -46,11 +46,29 @@ export const PositionStats: React.FC<PositionStatsProps> = ({ reserves, userBala
         netApy = ((supplyYield - borrowInterest) / totalSuppliedValueAll) * 100;
     }
 
-    // 5. Max LTV and Liquidation Threshold (Weighted based on collateral structure)
-    // For simplicity and since contract uses hardcoded limits: XLM ltv = 70%, USDC ltv = 70%
-    // Liquidation threshold = 82.5%
     const maxLtvLimit = 70;
     const liqThresholdLimit = 82.5;
+
+    // Calculate dynamic liquidation price
+    const aPrice = 0.825 * xlmSupplied - xlmDebt;
+    const bPrice = usdcDebtValue - 0.825 * (isUsdcCollateral ? usdcSuppliedValue : 0);
+    let liqPrice = 0;
+    let safetyMargin = 100;
+    let hasDebt = totalDebtValue > 0;
+    let isReverseRisk = false;
+
+    if (hasDebt) {
+        if (aPrice > 0) {
+            liqPrice = bPrice / aPrice;
+            if (liqPrice > 0) {
+                safetyMargin = Math.max(0, ((reserves.XLM.price - liqPrice) / reserves.XLM.price) * 100);
+            } else {
+                hasDebt = false; // no active liquidation risk
+            }
+        } else {
+            isReverseRisk = true;
+        }
+    }
 
     return (
         <div className="card glass-card pos-card glow-cyan">
@@ -96,6 +114,36 @@ export const PositionStats: React.FC<PositionStatsProps> = ({ reserves, userBala
                             {currentLtv.toFixed(1)}%
                         </span>
                         <span className="text-xs text-dim">Giới hạn vay: {maxLtvLimit}%</span>
+                    </div>
+
+                    {/* Added dynamic XLM liquidation price stat box */}
+                    <div className="stat-box" style={{ gridColumn: 'span 2', background: 'rgba(255, 23, 68, 0.01)', borderColor: hasDebt && safetyMargin < 20 ? 'rgba(255, 23, 68, 0.15)' : 'rgba(255,255,255,0.04)' }}>
+                        <span className="stat-label">Giá Thanh Lý XLM Dự Kiến (Oracle Liquidation Price)</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.2rem' }}>
+                            <span className={`stat-value ${!hasDebt ? 'text-dim' : isReverseRisk || safetyMargin < 15 ? 'text-red animate-pulse' : safetyMargin < 30 ? 'text-yellow' : 'text-green'}`} style={{ fontSize: '1.35rem' }}>
+                                {!hasDebt ? 'N/A (Không có nợ)' : isReverseRisk ? 'Rủi Ro Cực Cao (Thế chấp ngược)' : `$${liqPrice.toFixed(4)}`}
+                            </span>
+                            {hasDebt && !isReverseRisk && (
+                                <span className="badge" style={{
+                                    fontSize: '0.75rem',
+                                    borderRadius: '20px',
+                                    padding: '0.25rem 0.6rem',
+                                    border: '1px solid',
+                                    background: safetyMargin < 15 ? 'rgba(255, 23, 68, 0.1)' : safetyMargin < 30 ? 'rgba(255, 214, 0, 0.1)' : 'rgba(0, 230, 118, 0.1)',
+                                    borderColor: safetyMargin < 15 ? 'var(--red)' : safetyMargin < 30 ? 'var(--yellow)' : 'var(--green)',
+                                    color: safetyMargin < 15 ? 'var(--red)' : safetyMargin < 30 ? 'var(--yellow)' : 'var(--green)'
+                                }}>
+                                    {safetyMargin < 15 ? 'Nguy hiểm' : safetyMargin < 30 ? 'Cảnh giác' : 'Rất an toàn'}
+                                </span>
+                            )}
+                        </div>
+                        <span className="text-xs text-dim" style={{ marginTop: '0.1rem', display: 'block' }}>
+                            {!hasDebt 
+                                ? 'Thế chấp của bạn cực kỳ an toàn. Chưa ghi nhận dư nợ.' 
+                                : isReverseRisk 
+                                ? 'Cảnh báo: Lượng vay XLM của bạn lớn hơn lượng thế chấp! Vị thế có rủi ro thanh lý nếu giá XLM tăng mạnh.'
+                                : `Giá XLM hiện tại: $${reserves.XLM.price.toFixed(3)}. Cần giảm thêm ${safetyMargin.toFixed(1)}% để kích hoạt thanh lý vị thế.`}
+                        </span>
                     </div>
                 </div>
 

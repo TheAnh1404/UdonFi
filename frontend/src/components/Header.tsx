@@ -38,11 +38,11 @@ export const Header: React.FC<HeaderProps> = ({ reserves, wallet, onConnect, onD
             <div className="global-stats">
                 <div className="stat-pill">
                     <span className="label">TVL</span>
-                    <span className="val">${tvl.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    <span className="val">${tvl.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span>
                 </div>
                 <div className="stat-pill">
                     <span className="label">Total Borrowed</span>
-                    <span className="val">${borrowed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                    <span className="val">${borrowed.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span>
                 </div>
                 <div className="stat-pill">
                     <span className="label">Utilization</span>

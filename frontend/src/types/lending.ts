@@ -48,4 +48,6 @@ export interface LiqSandbox {
     xlmPrice: number;
     stepActive: number; // 0: None, 1: Prepare done, 2: Execute done
     sessionId: string | null;
+    isAutoKeeperActive: boolean; // Simulates background automated keeper bot
 }
+

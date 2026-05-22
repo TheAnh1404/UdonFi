@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { HelpCircle, AlertTriangle, X } from 'lucide-react';
+import { HelpCircle, AlertTriangle, X, ShieldAlert, Zap, Play, CheckCircle2, Gauge } from 'lucide-react';
 import type { Reserve, UserBalances } from '../types/lending';
 
-type ActionType = 'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY';
+type ActionType = 'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE';
 
 interface InteractionPanelProps {
     reserves: Record<'XLM' | 'USDC', Reserve>;
@@ -10,7 +10,8 @@ interface InteractionPanelProps {
     activeAction: ActionType;
     activeAsset: 'XLM' | 'USDC';
     onClose: () => void;
-    onSubmit: (action: ActionType, asset: 'XLM' | 'USDC', amount: number) => void;
+    onSubmit: (action: ActionType, asset: 'XLM' | 'USDC', amount: number, leverageFactor?: number) => void;
+    onToggleCollateral: (symbol: 'XLM' | 'USDC', useAsCollateral: boolean) => void;
 }
 
 export const InteractionPanel: React.FC<InteractionPanelProps> = ({
@@ -19,12 +20,17 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
     activeAction,
     activeAsset: propAsset,
     onClose,
-    onSubmit
+    onSubmit,
+    onToggleCollateral
 }) => {
     const [action, setAction] = useState<ActionType>(activeAction);
     const [asset, setAsset] = useState<'XLM' | 'USDC'>(propAsset);
     const [amountStr, setAmountStr] = useState<string>('');
     const amount = parseFloat(amountStr) || 0;
+
+    // Advanced features state
+    const [isLeverageMode, setIsLeverageMode] = useState<boolean>(false);
+    const [leverageFactor, setLeverageFactor] = useState<number>(2.0);
 
     // Keep state synced with props when they change
     useEffect(() => {
@@ -38,6 +44,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
     // Clear input on tab or asset change
     useEffect(() => {
         setAmountStr('');
+        setIsLeverageMode(false);
     }, [action, asset]);
 
     const reserve = reserves[asset];
@@ -61,6 +68,23 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
     const initialDebtValue = currentXlmDebtValue + currentUsdcDebtValue;
     const initialHealthFactor = initialDebtValue > 0 ? (initialCollateralValue * 0.825) / initialDebtValue : Infinity;
     const initialLtv = initialCollateralValue > 0 ? (initialDebtValue / initialCollateralValue) * 100 : 0;
+
+    // Smart Wizard Activation check
+    // If user goes to borrow but has no collateral active
+    const showWizard = action === 'BORROW' && !isXlmCollateral && !isUsdcCollateral;
+
+    // Detect current Wizard step
+    // Step 1: Supply XLM (if XLM supplied is 0)
+    // Step 2: Enable Collateral (if XLM supplied > 0 but not enabled as collateral)
+    // Step 3: Perform Borrow (if collateral is enabled)
+    let wizardStep = 1;
+    if (currentXlmSupplied > 0) {
+        if (!isXlmCollateral) {
+            wizardStep = 2;
+        } else {
+            wizardStep = 3;
+        }
+    }
 
     // Balance definitions for UI references
     let referenceBalance = 0;
@@ -91,41 +115,124 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
         setAmountStr(calculated.toFixed(4));
     };
 
+    // Handle Safety Presets for LTV
+    const handleSafetyPresetClick = (targetLtvPct: number) => {
+        if (action !== 'BORROW') return;
+        const targetLtv = targetLtvPct / 100;
+        const targetDebtUsd = initialCollateralValue * targetLtv;
+        const borrowNeededUsd = Math.max(0, targetDebtUsd - initialDebtValue);
+        const calculated = borrowNeededUsd / reserve.price;
+        setAmountStr(calculated.toFixed(4));
+    };
+
     // Simulation logic
     let simCollateralValue = initialCollateralValue;
     let simDebtValue = initialDebtValue;
 
     if (amount > 0) {
-        if (action === 'SUPPLY') {
-            const addedValue = amount * reserve.price;
-            // When supplying, let's assume it automatically acts as collateral
-            simCollateralValue += addedValue;
-        } else if (action === 'WITHDRAW') {
-            const removedValue = amount * reserve.price;
-            // Subtract from collateral if the asset is used as collateral
-            const isCollateral = asset === 'XLM' ? isXlmCollateral : isUsdcCollateral;
-            if (isCollateral) {
-                simCollateralValue = Math.max(0, simCollateralValue - removedValue);
+        if (isLeverageMode) {
+            // Leverage Loop simulation
+            const leveragedSupply = amount * leverageFactor;
+            const leveragedDebt = amount * (leverageFactor - 1) * reserves.XLM.price;
+            
+            simCollateralValue = initialCollateralValue + (leveragedSupply * reserves.XLM.price);
+            simDebtValue = initialDebtValue + leveragedDebt;
+        } else {
+            if (action === 'SUPPLY') {
+                const addedValue = amount * reserve.price;
+                simCollateralValue += addedValue;
+            } else if (action === 'WITHDRAW') {
+                const removedValue = amount * reserve.price;
+                const isCollateral = asset === 'XLM' ? isXlmCollateral : isUsdcCollateral;
+                if (isCollateral) {
+                    simCollateralValue = Math.max(0, simCollateralValue - removedValue);
+                }
+            } else if (action === 'BORROW') {
+                const addedDebtValue = amount * reserve.price;
+                simDebtValue += addedDebtValue;
+            } else if (action === 'REPAY') {
+                const repaidDebtValue = amount * reserve.price;
+                simDebtValue = Math.max(0, simDebtValue - repaidDebtValue);
             }
-        } else if (action === 'BORROW') {
-            const addedDebtValue = amount * reserve.price;
-            simDebtValue += addedDebtValue;
-        } else if (action === 'REPAY') {
-            const repaidDebtValue = amount * reserve.price;
-            simDebtValue = Math.max(0, simDebtValue - repaidDebtValue);
         }
     }
 
     const simHealthFactor = simDebtValue > 0 ? (simCollateralValue * 0.825) / simDebtValue : Infinity;
     const simLtv = simCollateralValue > 0 ? (simDebtValue / simCollateralValue) * 100 : 0;
 
-    const showWizard = action === 'BORROW' && initialCollateralValue === 0;
+    // Advanced dynamic liquidation price calculator
+    const getLiquidationPriceInfo = () => {
+        // We calculate XLM liquidation price based on simulated position
+        // Liquidation occurs when HF = 1.0 -> ((Collateral_XLM * P + Collateral_USDC) * 0.825) / (Debt_XLM * P + Debt_USDC) = 1.0
+        
+        let simXlmCollateralAmount = currentXlmSupplied;
+        let simUsdcCollateralValue = isUsdcCollateral ? currentUsdcSuppliedValue : 0;
+        let simXlmDebtAmount = currentXlmDebt;
+        let simUsdcDebtValue = currentUsdcDebtValue;
+
+        if (amount > 0) {
+            if (isLeverageMode) {
+                simXlmCollateralAmount += amount * leverageFactor;
+                simUsdcDebtValue += amount * (leverageFactor - 1) * reserves.XLM.price;
+            } else {
+                if (action === 'SUPPLY' && asset === 'XLM') {
+                    simXlmCollateralAmount += amount;
+                } else if (action === 'WITHDRAW' && asset === 'XLM' && isXlmCollateral) {
+                    simXlmCollateralAmount = Math.max(0, simXlmCollateralAmount - amount);
+                } else if (action === 'SUPPLY' && asset === 'USDC') {
+                    simUsdcCollateralValue += amount;
+                } else if (action === 'WITHDRAW' && asset === 'USDC' && isUsdcCollateral) {
+                    simUsdcCollateralValue = Math.max(0, simUsdcCollateralValue - amount);
+                } else if (action === 'BORROW' && asset === 'XLM') {
+                    simXlmDebtAmount += amount;
+                } else if (action === 'REPAY' && asset === 'XLM') {
+                    simXlmDebtAmount = Math.max(0, simXlmDebtAmount - amount);
+                } else if (action === 'BORROW' && asset === 'USDC') {
+                    simUsdcDebtValue += amount;
+                } else if (action === 'REPAY' && asset === 'USDC') {
+                    simUsdcDebtValue = Math.max(0, simUsdcDebtValue - amount);
+                }
+            }
+        }
+
+        const a = 0.825 * simXlmCollateralAmount - simXlmDebtAmount;
+        const b = simUsdcDebtValue - 0.825 * simUsdcCollateralValue;
+
+        if (simDebtValue === 0) {
+            return { hasRisk: false, price: 0, margin: 100, text: 'Không có nợ - 100% An toàn 🟢' };
+        }
+
+        if (a <= 0) {
+            // Negative 'a' means debt in XLM exceeds collateral in XLM (highly risky, XLM price drop makes position safer)
+            return { hasRisk: true, price: -1, margin: 0, text: 'Rủi ro cực cao - Bị ngược thế chấp 🔴' };
+        }
+
+        const liqPrice = b / a;
+
+        if (liqPrice <= 0) {
+            return { hasRisk: false, price: 0, margin: 100, text: 'Tài sản thế chấp quá lớn - Không thể thanh lý 🟢' };
+        }
+
+        const margin = Math.max(0, ((reserves.XLM.price - liqPrice) / reserves.XLM.price) * 100);
+        let safetyText = 'Rất An Toàn 🟢';
+        if (margin < 15) safetyText = 'CỰC KỲ NGUY HIỂM 🔴';
+        else if (margin < 30) safetyText = 'Rủi Ro Cao 🟡';
+
+        return {
+            hasRisk: true,
+            price: liqPrice,
+            margin: margin,
+            text: `Nếu XLM giảm về $${liqPrice.toFixed(4)} (${margin.toFixed(1)}% drop), bạn sẽ bị thanh lý! - ${safetyText}`
+        };
+    };
+
+    const liqInfo = getLiquidationPriceInfo();
 
     // Revert warnings
     let isRevert = false;
     let revertReason = '';
 
-    if (amount > referenceBalance && (action === 'SUPPLY' || action === 'WITHDRAW' || action === 'REPAY')) {
+    if (amount > referenceBalance && (action === 'SUPPLY' || action === 'WITHDRAW' || action === 'REPAY') && !isLeverageMode) {
         isRevert = true;
         revertReason = `Số lượng nhập vào vượt quá ${balanceLabel.toLowerCase()} khả dụng!`;
     } else if (action === 'WITHDRAW' && amount > (asset === 'XLM' ? currentXlmSupplied : currentUsdcSupplied)) {
@@ -141,13 +248,23 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
         } else if (action === 'BORROW' && simLtv > 70) {
             isRevert = true;
             revertReason = 'Khoản vay mới vượt quá tỷ lệ nợ tối đa LTV (70%) trên tổng tài sản thế chấp!';
+        } else if (isLeverageMode && simHealthFactor <= 1.0) {
+            isRevert = true;
+            revertReason = 'Đòn bẩy bị từ chối: Tỷ lệ nợ mô phỏng vượt ngưỡng an toàn tối đa!';
+        } else if (isLeverageMode && amount > userBalances.wallet.XLM) {
+            isRevert = true;
+            revertReason = 'Số lượng thế chấp ban đầu vượt quá số dư XLM khả dụng trong ví!';
         }
     }
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (amount <= 0 || isRevert) return;
-        onSubmit(action, asset, amount);
+        if (isLeverageMode) {
+            onSubmit('LEVERAGE', 'XLM', amount, leverageFactor);
+        } else {
+            onSubmit(action, asset, amount);
+        }
         setAmountStr('');
     };
 
@@ -176,111 +293,345 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                     ))}
                 </div>
 
-                {/* Asset selector */}
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-                    <button
-                        onClick={() => setAsset('XLM')}
-                        className={`btn-connect btn-sm ${asset === 'XLM' ? 'active-asset' : ''}`}
-                        style={{ flex: 1, borderColor: asset === 'XLM' ? 'var(--cyan)' : 'rgba(255,255,255,0.05)' }}
-                    >
-                        XLM (Stellar)
-                    </button>
-                    <button
-                        onClick={() => setAsset('USDC')}
-                        className={`btn-connect btn-sm ${asset === 'USDC' ? 'active-asset' : ''}`}
-                        style={{ flex: 1, borderColor: asset === 'USDC' ? 'var(--cyan)' : 'rgba(255,255,255,0.05)' }}
-                    >
-                        USDC (Stablecoin)
-                    </button>
+                {/* Asset selector & Leverage Mode Switch */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                            onClick={() => setAsset('XLM')}
+                            className={`btn-connect btn-sm ${asset === 'XLM' ? 'active-asset' : ''}`}
+                            style={{ flex: 1, borderColor: asset === 'XLM' ? 'var(--cyan)' : 'rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'center' }}
+                        >
+                            XLM (Stellar)
+                        </button>
+                        <button
+                            onClick={() => setAsset('USDC')}
+                            className={`btn-connect btn-sm ${asset === 'USDC' ? 'active-asset' : ''}`}
+                            style={{ flex: 1, borderColor: asset === 'USDC' ? 'var(--cyan)' : 'rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'center' }}
+                            disabled={isLeverageMode}
+                        >
+                            USDC (Stablecoin)
+                        </button>
+                    </div>
+
+                    {/* Leverage Mode Toggle for XLM (Only on Supply & Borrow) */}
+                    {(action === 'SUPPLY' || action === 'BORROW') && asset === 'XLM' && (
+                        <div className="leverage-mode-indicator">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <Zap size={14} className={isLeverageMode ? "text-cyan animate-pulse" : "text-dim"} />
+                                <span style={{ fontWeight: 600 }}>🚀 Đòn bẩy 1-Click (Leverage Loop)</span>
+                            </div>
+                            <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '38px', height: '20px' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={isLeverageMode}
+                                    onChange={(e) => {
+                                        setIsLeverageMode(e.target.checked);
+                                        if (e.target.checked) {
+                                            setAction('LEVERAGE');
+                                            setAmountStr('1000'); // default amount for loop
+                                        } else {
+                                            setAction(activeAction);
+                                            setAmountStr('');
+                                        }
+                                    }}
+                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span className="slider round" style={{
+                                    position: 'absolute',
+                                    cursor: 'pointer',
+                                    top: 0, left: 0, right: 0, bottom: 0,
+                                    backgroundColor: isLeverageMode ? 'var(--cyan)' : 'rgba(255,255,255,0.08)',
+                                    transition: '.4s',
+                                    borderRadius: '34px'
+                                }}>
+                                    <span className="slider-dot" style={{
+                                        position: 'absolute',
+                                        height: '14px',
+                                        width: '14px',
+                                        left: isLeverageMode ? '20px' : '3px',
+                                        bottom: '3px',
+                                        backgroundColor: '#fff',
+                                        transition: '.4s',
+                                        borderRadius: '50%'
+                                    }}></span>
+                                </span>
+                            </label>
+                        </div>
+                    )}
                 </div>
 
                 <form className="op-form" onSubmit={handleSubmit}>
                     {showWizard ? (
-                        <div 
-                            className="guided-wizard-card" 
-                            style={{
-                                background: 'rgba(0, 242, 254, 0.03)',
-                                border: '1px solid rgba(0, 242, 254, 0.15)',
-                                borderRadius: '14px',
-                                padding: '1.25rem',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '1rem',
-                                boxShadow: '0 0 15px rgba(0, 242, 254, 0.05)',
-                                animation: 'fadeIn-animation 0.4s ease-in-out'
-                            }}
-                        >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <div 
-                                    style={{ 
-                                        background: 'rgba(0, 242, 254, 0.1)', 
-                                        borderRadius: '50%', 
-                                        padding: '0.5rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        border: '1px solid rgba(0, 242, 254, 0.2)'
-                                    }}
-                                >
-                                    <HelpCircle className="text-cyan" size={24} />
-                                </div>
-                                <div>
-                                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                                        Chưa Có Tài Sản Thế Chấp
-                                    </h4>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                        Yêu cầu để kích hoạt hạn mức vay
-                                    </span>
-                                </div>
+                        /* 3-Step Interactive Onboarding Stepper */
+                        <div className="borrow-stepper">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                <Gauge className="text-cyan animate-pulse" size={20} />
+                                <h4 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-main)', fontWeight: 700 }}>
+                                    Bộ Hướng Dẫn Vay Tín Dụng 3 Bước
+                                </h4>
                             </div>
-
-                            <p style={{ margin: 0, fontSize: '0.825rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                                Bạn chưa kích hoạt thế chấp cho bất kỳ tài sản nào. Trong giao thức UdonFi, bạn cần nạp tài sản (ví dụ: XLM) làm thế chấp để có thể vay USDC.
+                            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.4', marginBottom: '0.5rem' }}>
+                                UdonFi vận hành trên chuỗi Stellar. Hãy thực hiện 3 bước đơn giản dưới đây để kích hoạt hạn mức vay:
                             </p>
 
-                            <div 
-                                style={{ 
-                                    background: 'rgba(0, 0, 0, 0.2)', 
-                                    borderRadius: '10px', 
-                                    padding: '0.75rem',
-                                    border: '1px solid rgba(255, 255, 255, 0.03)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '0.4rem'
-                                }}
-                            >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                                    <span style={{ color: 'var(--text-muted)' }}>Tổng thế chấp:</span>
-                                    <strong style={{ color: 'var(--red)' }}>$0.00</strong>
+                            {/* Step 1: Supply Collateral */}
+                            <div className={`step-card ${wizardStep === 1 ? 'active' : wizardStep > 1 ? 'completed' : 'locked'}`}>
+                                <div className="step-badge">
+                                    {wizardStep > 1 ? <CheckCircle2 size={16} className="text-green" /> : '1'}
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                                    <span style={{ color: 'var(--text-muted)' }}>Hạn mức vay tối đa LTV (70%):</span>
-                                    <strong style={{ color: 'var(--red)' }}>$0.00</strong>
+                                <div className="step-content">
+                                    <span className="step-title">
+                                        <span>Nạp XLM Thế Chấp</span>
+                                        {wizardStep > 1 && <span className="text-green text-xs">Hoàn thành</span>}
+                                    </span>
+                                    <span className="step-desc">
+                                        Nạp tài sản đảm bảo ban đầu vào Lending Pool để tạo sức mua.
+                                    </span>
+                                    {wizardStep === 1 && (
+                                        <div className="step-action-area">
+                                            <div className="step-input-row">
+                                                <input
+                                                    type="number"
+                                                    placeholder="Lượng XLM (ví dụ: 1000)"
+                                                    value={amountStr}
+                                                    onChange={(e) => setAmountStr(e.target.value)}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={amount <= 0 || amount > userBalances.wallet.XLM}
+                                                    onClick={() => {
+                                                        onSubmit('SUPPLY', 'XLM', amount);
+                                                        setAmountStr('');
+                                                    }}
+                                                    className="btn btn-sm btn-cyan"
+                                                >
+                                                    <Play size={10} />
+                                                    <span>Nạp ngay</span>
+                                                </button>
+                                            </div>
+                                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                                Số dư khả dụng: {userBalances.wallet.XLM.toLocaleString()} XLM
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
+                            {/* Step 2: Enable Collateral Toggle */}
+                            <div className={`step-card ${wizardStep === 2 ? 'active' : wizardStep > 2 ? 'completed' : 'locked'}`}>
+                                <div className="step-badge">
+                                    {wizardStep > 2 ? <CheckCircle2 size={16} className="text-green" /> : '2'}
+                                </div>
+                                <div className="step-content">
+                                    <span className="step-title">
+                                        <span>Kích Hoạt Thế Chấp (Soroban Bitmap)</span>
+                                        {wizardStep > 2 && <span className="text-green text-xs">Hoàn thành</span>}
+                                    </span>
+                                    <span className="step-desc">
+                                        Thiết lập quyền sử dụng XLM làm thế chấp (cập nhật Bit #0 trên u128 bitmap lưu trữ Ledger).
+                                    </span>
+                                    {wizardStep === 2 && (
+                                        <div className="step-action-area">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    onToggleCollateral('XLM', true);
+                                                }}
+                                                className="btn btn-sm btn-cyan"
+                                                style={{ width: 'fit-content' }}
+                                            >
+                                                <Zap size={12} />
+                                                <span>Bật quyền thế chấp XLM</span>
+                                            </button>
+                                            <div className="soroban-ttl-badge">
+                                                <span>⚡ Soroban u128 Bitmap Matrix: Bit 0 = 1</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Step 3: Perform Borrow */}
+                            <div className={`step-card ${wizardStep === 3 ? 'active' : 'locked'}`}>
+                                <div className="step-badge">3</div>
+                                <div className="step-content">
+                                    <span className="step-title">Thực Hiện Khoản Vay USDC</span>
+                                    <span className="step-desc">
+                                        Hạn mức vay của bạn đã mở! Hãy nhập số lượng USDC cần vay về ví.
+                                    </span>
+                                    {wizardStep === 3 && (
+                                        <div className="step-action-area">
+                                            <div className="step-input-row">
+                                                <input
+                                                    type="number"
+                                                    placeholder="Lượng USDC cần vay"
+                                                    value={amountStr}
+                                                    onChange={(e) => setAmountStr(e.target.value)}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={amount <= 0 || isRevert}
+                                                    onClick={() => {
+                                                        onSubmit('BORROW', 'USDC', amount);
+                                                        setAmountStr('');
+                                                    }}
+                                                    className="btn btn-sm btn-purple"
+                                                >
+                                                    <span>Vay ngay</span>
+                                                </button>
+                                            </div>
+                                            <span style={{ fontSize: '0.65rem', color: 'var(--cyan)' }}>
+                                                Hạn mức vay tối đa của bạn: ${referenceBalance.toFixed(2)} USDC
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ) : isLeverageMode ? (
+                        /* 1-Click Leverage Loop UI */
+                        <div>
+                            {/* Initial capital input */}
+                            <div className="form-row-bal">
+                                <span className="input-label">Vốn XLM ban đầu của bạn</span>
+                                <span className="input-bal-ref">
+                                    Khả dụng: {userBalances.wallet.XLM.toLocaleString()} XLM
+                                </span>
+                            </div>
+                            <div className="input-container" style={{ marginBottom: '1rem' }}>
+                                <input
+                                    type="number"
+                                    placeholder="0.00"
+                                    value={amountStr}
+                                    onChange={(e) => setAmountStr(e.target.value)}
+                                    min="0"
+                                />
+                                <span className="input-suffix">XLM</span>
+                            </div>
+
+                            {/* Leverage Factor Slider */}
+                            <div className="leverage-slider-box">
+                                <div className="leverage-val-label">
+                                    <span className="preset-title">Hệ số đòn bẩy</span>
+                                    <strong className="text-cyan" style={{ fontFamily: 'var(--font-heading)' }}>
+                                        {leverageFactor.toFixed(1)}x
+                                    </strong>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="1.1"
+                                    max="2.3"
+                                    step="0.1"
+                                    value={leverageFactor}
+                                    onChange={(e) => setLeverageFactor(parseFloat(e.target.value))}
+                                    className="slider-leverage"
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                    <span>LTV thấp (1.1x)</span>
+                                    <span>LTV cân bằng (1.8x)</span>
+                                    <span>LTV tối đa (2.3x)</span>
+                                </div>
+                            </div>
+
+                            {/* Side-by-side comparison */}
+                            <div className="leverage-comparison">
+                                <div className="comp-card">
+                                    <span className="comp-title">Bình thường (1.0x)</span>
+                                    <div className="comp-row">
+                                        <span>Nạp:</span>
+                                        <strong>{amount} XLM</strong>
+                                    </div>
+                                    <div className="comp-row">
+                                        <span>Vay:</span>
+                                        <strong>0 USDC</strong>
+                                    </div>
+                                    <div className="comp-row">
+                                        <span>APY nạp:</span>
+                                        <strong className="text-green">1.25%</strong>
+                                    </div>
+                                    <div className="comp-row">
+                                        <span>Thanh lý:</span>
+                                        <span className="text-dim">Không có</span>
+                                    </div>
+                                </div>
+                                <div className="comp-card highlight">
+                                    <span className="comp-title text-cyan">Đòn bẩy ({leverageFactor.toFixed(1)}x)</span>
+                                    <div className="comp-row">
+                                        <span>Tổng nạp:</span>
+                                        <strong className="text-cyan">{(amount * leverageFactor).toFixed(1)} XLM</strong>
+                                    </div>
+                                    <div className="comp-row">
+                                        <span>Tổng nợ:</span>
+                                        <strong className="text-purple">{(amount * (leverageFactor - 1) * reserves.XLM.price).toFixed(1)} USDC</strong>
+                                    </div>
+                                    <div className="comp-row">
+                                        <span>Net LTV:</span>
+                                        <strong className="text-yellow">{(((leverageFactor - 1) / leverageFactor) * 100).toFixed(1)}%</strong>
+                                    </div>
+                                    <div className="comp-row">
+                                        <span>Thanh lý:</span>
+                                        <strong className="text-red">${( (amount * (leverageFactor - 1) * reserves.XLM.price) / ((amount * leverageFactor) * 0.825) || 0 ).toFixed(3)}</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Flash-loan multi-call step visualizer */}
+                            <div className="loop-steps-visual">
+                                <span className="preset-title" style={{ marginBottom: '0.2rem' }}>Quy trình multi-call Stellar Soroban (1 Giao dịch):</span>
+                                <div className="loop-step-line active">
+                                    <div className="loop-step-dot"></div>
+                                    <span>1. Nạp {amount.toLocaleString()} XLM tài sản đảm bảo gốc.</span>
+                                </div>
+                                <div className="loop-step-line active">
+                                    <div className="loop-step-dot"></div>
+                                    <span>2. Vay tự động {(amount * (leverageFactor - 1) * reserves.XLM.price).toFixed(1)} USDC.</span>
+                                </div>
+                                <div className="loop-step-line active">
+                                    <div className="loop-step-dot"></div>
+                                    <span>3. Định tuyến Swap USDC → {(amount * (leverageFactor - 1)).toFixed(1)} XLM qua DEX.</span>
+                                </div>
+                                <div className="loop-step-line active">
+                                    <div className="loop-step-dot"></div>
+                                    <span>4. Nạp tái thế chấp {(amount * (leverageFactor - 1)).toFixed(1)} XLM để chốt đòn bẩy.</span>
+                                </div>
+                            </div>
+
+                            {/* Simulation summary */}
+                            <div className="simulation-box" style={{ marginBottom: '1rem' }}>
+                                <h4>Mô Phỏng Đòn Bẩy Tài Khoản</h4>
+                                <div className="sim-row">
+                                    <span>Hệ số Sức Khỏe HF:</span>
+                                    <strong className={simHealthFactor > 1.5 ? "text-green" : simHealthFactor >= 1.0 ? "text-yellow" : "text-red animate-pulse"}>
+                                        {simHealthFactor === Infinity ? '∞' : simHealthFactor.toFixed(2)}
+                                    </strong>
+                                </div>
+                                <div className="sim-row">
+                                    <span>Thời gian dữ liệu TTL:</span>
+                                    <span className="text-cyan">Tự động gia hạn (+500 Ledgers)</span>
+                                </div>
+                            </div>
+
+                            {/* Revert error message */}
+                            {isRevert && (
+                                <div className="revert-alert" style={{ marginBottom: '1rem' }}>
+                                    <AlertTriangle size={18} />
+                                    <span>{revertReason}</span>
+                                </div>
+                            )}
+
+                            {/* Trigger submit */}
                             <button
-                                type="button"
-                                onClick={() => {
-                                    setAction('SUPPLY');
-                                    setAsset('XLM');
-                                    setAmountStr('500');
-                                }}
+                                type="submit"
+                                disabled={amount <= 0 || isRevert}
                                 className="btn btn-block btn-cyan"
-                                style={{ 
-                                    marginTop: '0.5rem',
-                                    boxShadow: '0 0 12px rgba(0, 242, 254, 0.3)',
-                                    border: '1px solid var(--cyan)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '0.5rem'
-                                }}
+                                style={{ boxShadow: '0 0 15px rgba(0, 242, 254, 0.3)', border: '1px solid var(--cyan)' }}
                             >
-                                <span>Nạp XLM Làm Thế Chấp Ngay</span>
+                                <Zap size={14} />
+                                <span>Kích Hoạt Đòn Bẩy 1-Click {leverageFactor.toFixed(1)}x</span>
                             </button>
                         </div>
                     ) : (
+                        /* Standard borrow / lend interactions */
                         <>
                             {/* Balance reference */}
                             <div className="form-row-bal">
@@ -304,12 +655,45 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                             </div>
 
                             {/* Percent shortcuts */}
-                            <div className="quick-pct-btns">
+                            <div className="quick-pct-btns" style={{ marginBottom: action === 'BORROW' ? '0.5rem' : '1rem' }}>
                                 <button type="button" onClick={() => handlePercentClick(0.25)} className="btn-pct">25%</button>
                                 <button type="button" onClick={() => handlePercentClick(0.5)} className="btn-pct">50%</button>
                                 <button type="button" onClick={() => handlePercentClick(0.75)} className="btn-pct">75%</button>
                                 <button type="button" onClick={() => handlePercentClick(1.0)} className="btn-pct">MAX</button>
                             </div>
+
+                            {/* Safety presets (Exclusive to Borrow) */}
+                            {action === 'BORROW' && (
+                                <div className="safety-presets-container">
+                                    <span className="preset-title">Mức độ an toàn gợi ý (LTV presets):</span>
+                                    <div className="preset-btns-row">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSafetyPresetClick(30)}
+                                            className="btn-preset safe"
+                                        >
+                                            <span>An Toàn</span>
+                                            <span className="preset-pct">30% LTV</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSafetyPresetClick(50)}
+                                            className="btn-preset moderate"
+                                        >
+                                            <span>Thăng Bằng</span>
+                                            <span className="preset-pct">50% LTV</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSafetyPresetClick(65)}
+                                            className="btn-preset aggressive"
+                                        >
+                                            <span>Mạo Hiểm</span>
+                                            <span className="preset-pct">65% LTV</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Simulation results box */}
                             <div className="simulation-box">
@@ -356,6 +740,14 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                                         </strong>
                                     </span>
                                 </div>
+
+                                {/* Dynamic Liquidation Price Alert Box */}
+                                {liqInfo.hasRisk && (
+                                    <div className={`liq-alert-box ${liqInfo.margin < 15 ? 'danger' : liqInfo.margin < 30 ? 'warning' : 'safe'}`}>
+                                        <ShieldAlert size={14} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+                                        <span>{liqInfo.text}</span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Revert Alert Warning */}

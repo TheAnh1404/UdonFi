@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { HealthFactorGauge } from './components/HealthFactorGauge';
 import { PositionStats } from './components/PositionStats';
+import { SystemReserves } from './components/SystemReserves';
+import { Footer } from './components/Footer';
 import { MarketTable } from './components/MarketTable';
 import { InteractionPanel } from './components/InteractionPanel';
 import { SorobanBitmap } from './components/SorobanBitmap';
@@ -9,6 +11,7 @@ import { SorobanTtl } from './components/SorobanTtl';
 import { SorobanKinked } from './components/SorobanKinked';
 import { SorobanLiquidation } from './components/SorobanLiquidation';
 import { ConsoleLogger } from './components/ConsoleLogger';
+import { TradingViewChart } from './components/TradingViewChart';
 import type { Reserve, UserBalances, LogLine, LiqSandbox } from './types/lending';
 import { Cpu, Hourglass, AreaChart, ShieldAlert } from 'lucide-react';
 
@@ -78,7 +81,7 @@ function App() {
     // Tab and modal panel controls
     const [activeTab, setActiveTab] = useState<'BITMAP' | 'TTL' | 'KINKED' | 'LIQUIDATION'>('BITMAP');
     const [isInteractionOpen, setIsInteractionOpen] = useState(false);
-    const [activeAction, setActiveAction] = useState<'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY'>('SUPPLY');
+    const [activeAction, setActiveAction] = useState<'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE'>('SUPPLY');
     const [activeAsset, setActiveAsset] = useState<'XLM' | 'USDC'>('XLM');
 
     // Liquidation sandbox state
@@ -87,8 +90,10 @@ function App() {
         borrowUSDC: 200,
         xlmPrice: 0.15,
         stepActive: 0,
-        sessionId: null
+        sessionId: null,
+        isAutoKeeperActive: false
     });
+
 
     // Helper to add terminal logs
     const addLog = (type: LogLine['type'], message: string) => {
@@ -145,49 +150,73 @@ function App() {
 
     // Accrue interest live (Visual Wow Factor!)
     useEffect(() => {
-        if (!wallet.isConnected) return;
-
+        let tickCount = 0;
         const interval = setInterval(() => {
             setReserves((prev) => {
                 const xlm = prev.XLM;
                 const usdc = prev.USDC;
 
-                // Accrue a tiny fraction of interest (1 block is ~5 seconds)
-                // Index = Index * (1 + APY / (Blocks per Year))
-                const blocksPerYear = 365 * 24 * 720; // 5s block time
+                // Accrue interest smoothly every 1 second
+                // ticksPerYear = 365 days * 24 hours * 3600 seconds
+                const ticksPerYear = 365 * 24 * 3600;
                 
-                const newXlmLiqIndex = xlm.liquidityIndex * (1 + (xlm.supplyApy / 100) / blocksPerYear);
-                const newXlmBorrowIndex = xlm.borrowIndex * (1 + (xlm.borrowApy / 100) / blocksPerYear);
+                const newXlmLiqIndex = xlm.liquidityIndex * (1 + (xlm.supplyApy / 100) / ticksPerYear);
+                const newXlmBorrowIndex = xlm.borrowIndex * (1 + (xlm.borrowApy / 100) / ticksPerYear);
 
-                const newUsdcLiqIndex = usdc.liquidityIndex * (1 + (usdc.supplyApy / 100) / blocksPerYear);
-                const newUsdcBorrowIndex = usdc.borrowIndex * (1 + (usdc.borrowApy / 100) / blocksPerYear);
+                const newUsdcLiqIndex = usdc.liquidityIndex * (1 + (usdc.supplyApy / 100) / ticksPerYear);
+                const newUsdcBorrowIndex = usdc.borrowIndex * (1 + (usdc.borrowApy / 100) / ticksPerYear);
+
+                // Live tick the total supplied and borrowed assets visually to make TVL tick!
+                const newXlmSupplied = xlm.totalSupplied * (1 + (xlm.supplyApy / 100) / ticksPerYear);
+                const newXlmBorrowed = xlm.totalBorrowed * (1 + (xlm.borrowApy / 100) / ticksPerYear);
+
+                const newUsdcSupplied = usdc.totalSupplied * (1 + (usdc.supplyApy / 100) / ticksPerYear);
+                const newUsdcBorrowed = usdc.totalBorrowed * (1 + (usdc.borrowApy / 100) / ticksPerYear);
 
                 return {
-                    XLM: { ...xlm, liquidityIndex: newXlmLiqIndex, borrowIndex: newXlmBorrowIndex },
-                    USDC: { ...usdc, liquidityIndex: newUsdcLiqIndex, borrowIndex: newUsdcBorrowIndex }
+                    XLM: { 
+                        ...xlm, 
+                        liquidityIndex: newXlmLiqIndex, 
+                        borrowIndex: newXlmBorrowIndex,
+                        totalSupplied: newXlmSupplied,
+                        totalBorrowed: newXlmBorrowed
+                    },
+                    USDC: { 
+                        ...usdc, 
+                        liquidityIndex: newUsdcLiqIndex, 
+                        borrowIndex: newUsdcBorrowIndex,
+                        totalSupplied: newUsdcSupplied,
+                        totalBorrowed: newUsdcBorrowed
+                    }
                 };
             });
 
-            // Count down TTL & count up Ledger
-            setUserBalances((prev) => {
-                if (prev.ttl <= 1) {
-                    addLog('ERROR', '⚠️ SỰ CỐ: Ledger TTL chạm 0! Dữ liệu tài khoản bị EVICITED khỏi Soroban Ledger.');
-                    addLog('INFO', 'Vui lòng nhấn "Gia hạn TTL" hoặc nạp tài sản để khôi phục.');
-                    return {
-                        ...prev,
-                        ttl: 0,
-                        suppliedScaled: { XLM: 0, USDC: 0 },
-                        debtScaled: { XLM: 0, USDC: 0 },
-                        bitmap: 0n
-                    };
+            // Count down TTL & count up Ledger only if wallet is connected (every 5 seconds = 1 block)
+            if (wallet.isConnected) {
+                tickCount++;
+                if (tickCount >= 5) {
+                    tickCount = 0;
+                    setUserBalances((prev) => {
+                        if (prev.ttl <= 1) {
+                            addLog('ERROR', '⚠️ SỰ CỐ: Ledger TTL chạm 0! Dữ liệu tài khoản bị EVICITED khỏi Soroban Ledger.');
+                            addLog('INFO', 'Vui lòng nhấn "Gia hạn TTL" hoặc nạp tài sản để khôi phục.');
+                            return {
+                                ...prev,
+                                ttl: 0,
+                                suppliedScaled: { XLM: 0, USDC: 0 },
+                                debtScaled: { XLM: 0, USDC: 0 },
+                                bitmap: 0n
+                            };
+                        }
+                        return {
+                            ...prev,
+                            ttl: prev.ttl - 1,
+                            currentLedger: prev.currentLedger + 1
+                        };
+                    });
                 }
-                return {
-                    ...prev,
-                    ttl: prev.ttl - 1,
-                    currentLedger: prev.currentLedger + 1
-                };
-            });
-        }, 5000);
+            }
+        }, 1000);
 
         return () => clearInterval(interval);
     }, [wallet.isConnected]);
@@ -207,7 +236,8 @@ function App() {
     const handleTransactionSubmit = (
         action: typeof activeAction,
         asset: typeof activeAsset,
-        amount: number
+        amount: number,
+        leverageFactor?: number
     ) => {
         setUserBalances((prev) => {
             const reserve = reserves[asset];
@@ -281,6 +311,36 @@ function App() {
                     ...prevRes,
                     [asset]: getUpdatedReserveRates(prevRes[asset], prevRes[asset].totalSupplied, Math.max(0, prevRes[asset].totalBorrowed - amount))
                 }));
+            } else if (action === 'LEVERAGE') {
+                const L = leverageFactor || 2.0;
+                const initialSupply = amount;
+                const finalSupply = initialSupply * L;
+                const borrowedUsdc = initialSupply * (L - 1) * reserves.XLM.price;
+
+                newWallet.XLM -= initialSupply;
+                
+                // Supplied XLM
+                const changeSuppliedScaled = finalSupply / reserves.XLM.liquidityIndex;
+                newSuppliedScaled.XLM += changeSuppliedScaled;
+
+                // Debt USDC
+                const changeDebtScaled = borrowedUsdc / reserves.USDC.borrowIndex;
+                newDebtScaled.USDC += changeDebtScaled;
+
+                logMessage = `Kích hoạt thành công Leverage Loop ${L.toFixed(1)}x: Nạp thế chấp ${initialSupply.toFixed(2)} XLM, qua nhiều vòng lặp vay-nạp (Multi-loop), nâng tổng thế chấp lên ${finalSupply.toFixed(2)} XLM và tạo khoản nợ ${borrowedUsdc.toFixed(2)} USDC.`;
+
+                // Update bitmap: turn on XLM collateral (bit 0) and USDC borrow (bit 3)
+                newBitmap |= (1n << 0n) | (1n << 3n);
+
+                // Update pool reserves
+                setReserves((prevRes) => {
+                    const updatedXlm = getUpdatedReserveRates(prevRes.XLM, prevRes.XLM.totalSupplied + finalSupply, prevRes.XLM.totalBorrowed);
+                    const updatedUsdc = getUpdatedReserveRates(prevRes.USDC, prevRes.USDC.totalSupplied, prevRes.USDC.totalBorrowed + borrowedUsdc);
+                    return {
+                        XLM: updatedXlm,
+                        USDC: updatedUsdc
+                    };
+                });
             }
 
             addLog('SUCCESS', logMessage);
@@ -394,52 +454,6 @@ function App() {
         });
     };
 
-    // Two-step liquidation sandbox callbacks
-    const handleSlideSandboxPrice = (price: number) => {
-        setSandbox((prev) => ({ ...prev, xlmPrice: price }));
-        addLog('INFO', `Mô phỏng Oracle: Giá XLM thay đổi thành $${price.toFixed(3)}`);
-    };
-
-    const handlePrepareLiquidation = () => {
-        const mockSessionId = '0x' + Math.random().toString(16).substring(2, 10).toUpperCase() + 'BE89';
-        setSandbox((prev) => ({
-            ...prev,
-            stepActive: 1,
-            sessionId: mockSessionId
-        }));
-        addLog('EVENT', `[Step 1] Kích hoạt prepare_liquidation() thành công.`);
-        addLog('INFO', `Soroban: Session được đăng ký tại ledger với ID: ${mockSessionId}. Khóa 2,000 XLM thế chấp. Tiêu thụ 60,000,000 CPU instructions.`);
-    };
-
-    const handleExecuteLiquidation = () => {
-        const debtPaid = sandbox.borrowUSDC; // pays off all 200 USDC debt
-        const requiredCollateralValue = debtPaid * 1.05; // 210 USD
-        const seizedXlm = requiredCollateralValue / sandbox.xlmPrice; // at current XLM price
-        const actualSeized = Math.min(sandbox.supplyXLM, seizedXlm);
-
-        setSandbox((prev) => ({
-            ...prev,
-            stepActive: 2,
-            supplyXLM: Math.max(0, prev.supplyXLM - actualSeized),
-            borrowUSDC: 0
-        }));
-
-        addLog('SUCCESS', `[Step 2] Kích hoạt execute_liquidation() thành công.`);
-        addLog('SUCCESS', `Đã thanh toán nợ: ${debtPaid} USDC. Tịch thu ${actualSeized.toFixed(1)} XLM thế chấp (Bao gồm 5% thưởng thanh lý).`);
-        addLog('INFO', `Soroban VM: Giải phóng phiên ID ${sandbox.sessionId}. Tiêu thụ 30,000,000 CPU instructions. Tổng CPU 2 bước: 90,000,000 (Dưới ngưỡng 100M).`);
-    };
-
-    const handleResetSandbox = () => {
-        setSandbox({
-            supplyXLM: 2000,
-            borrowUSDC: 200,
-            xlmPrice: 0.15,
-            stepActive: 0,
-            sessionId: null
-        });
-        addLog('SYSTEM', 'Sandbox thanh lý đã được khôi phục về giá trị ban đầu.');
-    };
-
     // Calculate user health factor for main dashboard
     const xlmSupplied = userBalances.suppliedScaled.XLM * reserves.XLM.liquidityIndex;
     const usdcSupplied = userBalances.suppliedScaled.USDC * reserves.USDC.liquidityIndex;
@@ -459,12 +473,147 @@ function App() {
 
     const mainHealthFactor = totalDebtValue > 0 ? (totalCollateralValue * 0.825) / totalDebtValue : Infinity;
 
+    // Check if real-time P2P mode is active (user has an actual position supplied or borrowed)
+    const isRealP2PActive = wallet.isConnected && (xlmSupplied > 0 || usdcDebt > 0);
+
+    // Two-step liquidation sandbox callbacks
+    const handleSlideSandboxPrice = (price: number) => {
+        setSandbox((prev) => ({ ...prev, xlmPrice: price }));
+        addLog('INFO', `Mô phỏng Oracle: Giá XLM thay đổi thành $${price.toFixed(3)}`);
+    };
+
+    const handleToggleAutoKeeper = (active: boolean) => {
+        setSandbox((prev) => ({ ...prev, isAutoKeeperActive: active }));
+        addLog('SYSTEM', active 
+            ? '🤖 Bot Keeper Tự Động: ĐÃ KÍCH HOẠT. Đang quét Ledger nền tìm kiếm các vị thế dưới mức an toàn (HF < 1.0)...' 
+            : '🤖 Bot Keeper Tự Động: ĐÃ TẮT. Chuyển sang chế độ thanh lý thủ công.'
+        );
+    };
+
+    const handlePrepareLiquidation = () => {
+        const mockSessionId = '0x' + Math.random().toString(16).substring(2, 10).toUpperCase() + 'BE89';
+        const isBot = sandbox.isAutoKeeperActive;
+        setSandbox((prev) => ({
+            ...prev,
+            stepActive: 1,
+            sessionId: mockSessionId
+        }));
+        
+        const activeSupply = isRealP2PActive ? xlmSupplied : sandbox.supplyXLM;
+        const prefix = isBot ? '🤖 [Keeper Bot]: ' : '[Step 1] ';
+        addLog(isBot ? 'SUCCESS' : 'EVENT', `${prefix}Kích hoạt prepare_liquidation() thành công.`);
+        addLog('INFO', `${isBot ? '🤖 Bot Keeper: ' : ''}Soroban Session được đăng ký tại ledger với ID: ${mockSessionId}. Đã khóa ${activeSupply.toLocaleString(undefined, {maximumFractionDigits: 1})} XLM thế chấp. Tiêu thụ 60,000,000 CPU instructions.`);
+    };
+
+    const handleExecuteLiquidation = () => {
+        const activeSupply = isRealP2PActive ? xlmSupplied : sandbox.supplyXLM;
+        const activeBorrow = isRealP2PActive ? usdcDebt : sandbox.borrowUSDC;
+
+        const debtPaid = activeBorrow; // pays off all USDC debt
+        const requiredCollateralValue = debtPaid * 1.05; // 210 USD (with 5% liquidation bonus)
+        const seizedXlm = requiredCollateralValue / sandbox.xlmPrice; // at current XLM price
+        const actualSeized = Math.min(activeSupply, seizedXlm);
+        const isBot = sandbox.isAutoKeeperActive;
+
+        if (isRealP2PActive) {
+            setUserBalances((prev) => {
+                const newDebtScaled = { ...prev.debtScaled, USDC: 0 };
+                const seizedScaled = actualSeized / reserves.XLM.liquidityIndex;
+                const newSuppliedScaled = {
+                    ...prev.suppliedScaled,
+                    XLM: Math.max(0, prev.suppliedScaled.XLM - seizedScaled)
+                };
+
+                // Update bitmap: turn off USDC borrow (bit 3) since debt is 0
+                let newBitmap = prev.bitmap;
+                newBitmap &= ~(1n << 3n);
+
+                // turn off XLM supply (bit 0) if remaining supplied XLM is 0
+                const remainingXlmSupply = newSuppliedScaled.XLM * reserves.XLM.liquidityIndex;
+                if (remainingXlmSupply < 0.01) {
+                    newSuppliedScaled.XLM = 0;
+                    newBitmap &= ~(1n << 0n);
+                }
+
+                return {
+                    ...prev,
+                    suppliedScaled: newSuppliedScaled,
+                    debtScaled: newDebtScaled,
+                    bitmap: newBitmap
+                };
+            });
+
+            // Update pool reserves
+            setReserves((prevRes) => {
+                const updatedUsdc = getUpdatedReserveRates(prevRes.USDC, prevRes.USDC.totalSupplied, Math.max(0, prevRes.USDC.totalBorrowed - debtPaid));
+                const updatedXlm = getUpdatedReserveRates(prevRes.XLM, Math.max(0, prevRes.XLM.totalSupplied - actualSeized), prevRes.XLM.totalBorrowed);
+                return {
+                    XLM: updatedXlm,
+                    USDC: updatedUsdc
+                };
+            });
+        } else {
+            // Update local sandbox state
+            setSandbox((prev) => ({
+                ...prev,
+                supplyXLM: Math.max(0, prev.supplyXLM - actualSeized),
+                borrowUSDC: 0
+            }));
+
+            // Sync with system pool reserves in simulation mode
+            setReserves((prevRes) => {
+                const updatedUsdc = getUpdatedReserveRates(prevRes.USDC, prevRes.USDC.totalSupplied, Math.max(0, prevRes.USDC.totalBorrowed - debtPaid));
+                const updatedXlm = getUpdatedReserveRates(prevRes.XLM, Math.max(0, prevRes.XLM.totalSupplied - actualSeized), prevRes.XLM.totalBorrowed);
+                return {
+                    XLM: updatedXlm,
+                    USDC: updatedUsdc
+                };
+            });
+        }
+
+        // Set step active to 2
+        setSandbox((prev) => ({
+            ...prev,
+            stepActive: 2
+        }));
+
+        const prefix = isBot ? '🤖 [Keeper Bot]: ' : '[Step 2] ';
+        addLog('SUCCESS', `${prefix}Kích hoạt execute_liquidation() thành công.`);
+        addLog('SUCCESS', `${isBot ? '🤖 Bot Keeper: ' : ''}Đã tự động thanh toán nợ: ${debtPaid.toFixed(2)} USDC. Tịch thu ${actualSeized.toFixed(1)} XLM thế chấp (Bao gồm 5% thưởng thanh lý).`);
+        addLog('INFO', `${isBot ? '🤖 Bot Keeper: ' : ''}Soroban VM: Giải phóng phiên ID ${sandbox.sessionId}. Tiêu thụ 30,000,000 CPU instructions. Tổng CPU 2 bước: 90,000,000 (Dưới ngưỡng 100M).`);
+        if (isRealP2PActive) {
+            addLog('SUCCESS', `🤖 [P2P Settlement]: Đã khấu trừ ví Lending của bạn trên Ledger! Dư nợ USDC: 0.00, XLM thế chấp bị tịch thu: ${actualSeized.toFixed(1)}.`);
+        }
+    };
+
+    const handleResetSandbox = () => {
+        setSandbox((prev) => ({
+            ...prev,
+            xlmPrice: 0.15,
+            stepActive: 0,
+            sessionId: null,
+            isAutoKeeperActive: false
+        }));
+        if (!isRealP2PActive) {
+            setSandbox((prev) => ({
+                ...prev,
+                supplyXLM: 2000,
+                borrowUSDC: 200
+            }));
+            addLog('SYSTEM', 'Sandbox thanh lý đã được khôi phục về giá trị ban đầu. Chế độ Bot tự động đã được tắt.');
+        } else {
+            addLog('SYSTEM', 'Sandbox thanh lý đã được reset giá XLM về $0.15. Vị thế P2P thực tế của bạn vẫn đang được đồng bộ!');
+        }
+    };
+
     return (
         <div className="app-container">
             {/* Ambient Background Glows */}
-            <div className="bg-glow bg-glow-1"></div>
-            <div className="bg-glow bg-glow-2"></div>
-            <div className="bg-glow bg-glow-3"></div>
+            <div className="bg-glow-container">
+                <div className="bg-glow bg-glow-1"></div>
+                <div className="bg-glow bg-glow-2"></div>
+                <div className="bg-glow bg-glow-3"></div>
+            </div>
 
             {/* Header Component */}
             <Header
@@ -474,11 +623,17 @@ function App() {
                 onDisconnect={handleDisconnectWallet}
             />
 
+            {/* Live real-time TradingView Chart */}
+            <TradingViewChart />
+
             {/* Top row: Position Stats and Health Factor */}
             <div className="dashboard-row pos-row">
                 <PositionStats reserves={reserves} userBalances={userBalances} wallet={wallet} />
                 <HealthFactorGauge healthFactor={mainHealthFactor} />
             </div>
+
+            {/* System Reserves Pool State - Nằm riêng biệt bên dưới */}
+            <SystemReserves reserves={reserves} />
 
             {/* Middle row: Market Table and Interaction Panel */}
             <div className="dashboard-row market-row">
@@ -497,6 +652,7 @@ function App() {
                         activeAsset={activeAsset}
                         onClose={() => setIsInteractionOpen(false)}
                         onSubmit={handleTransactionSubmit}
+                        onToggleCollateral={handleToggleCollateral}
                     />
                 )}
             </div>
@@ -555,8 +711,14 @@ function App() {
                     {activeTab === 'LIQUIDATION' && (
                         <SorobanLiquidation
                             reserves={reserves}
-                            sandbox={sandbox}
+                            sandbox={{
+                                ...sandbox,
+                                supplyXLM: isRealP2PActive ? xlmSupplied : sandbox.supplyXLM,
+                                borrowUSDC: isRealP2PActive ? usdcDebt : sandbox.borrowUSDC
+                            }}
+                            isRealP2P={isRealP2PActive}
                             onSlidePrice={handleSlideSandboxPrice}
+                            onToggleAutoKeeper={handleToggleAutoKeeper}
                             onPrepare={handlePrepareLiquidation}
                             onExecute={handleExecuteLiquidation}
                             onReset={handleResetSandbox}
@@ -572,9 +734,7 @@ function App() {
             />
 
             {/* Footer */}
-            <footer className="app-footer">
-                <p>© 2026 UdonFi Protocol. Designed for Stellar Soroban Network with advanced Web3 UX standards.</p>
-            </footer>
+            <Footer currentLedger={userBalances.currentLedger} />
         </div>
     );
 }

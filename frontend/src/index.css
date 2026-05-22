@@ -49,6 +49,17 @@ body {
 }
 
 /* Background Glow Effects */
+.bg-glow-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    z-index: -1;
+    pointer-events: none;
+}
+
 .bg-glow {
     position: absolute;
     border-radius: 50%;
@@ -1664,3 +1675,483 @@ body {
     .tab-pill-container { justify-content: center; }
     .bitmap-grid { grid-template-columns: repeat(8, 1fr); }
 }
+
+/* ==========================================================================
+   Web3 Borrowing/Lending Premium Upgrades (Stepper, Safety Presets, Leverage)
+   ========================================================================== */
+
+/* 1. Interactive Borrowing Stepper */
+.borrow-stepper {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.step-card {
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    padding: 1rem;
+    display: flex;
+    gap: 0.85rem;
+    position: relative;
+    transition: var(--transition-smooth);
+}
+
+.step-card.active {
+    background: rgba(0, 242, 254, 0.03);
+    border-color: rgba(0, 242, 254, 0.25);
+    box-shadow: 0 0 15px rgba(0, 242, 254, 0.08);
+}
+
+.step-card.completed {
+    background: rgba(0, 230, 118, 0.02);
+    border-color: rgba(0, 230, 118, 0.15);
+}
+
+.step-card.locked {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.step-badge {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: var(--transition-smooth);
+    border: 1px solid transparent;
+}
+
+.step-card.active .step-badge {
+    background: var(--cyan);
+    color: #070a13;
+    box-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+}
+
+.step-card.completed .step-badge {
+    background: var(--green);
+    color: #070a13;
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.4);
+}
+
+.step-badge.check {
+    font-size: 0.85rem;
+}
+
+.step-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.step-title {
+    font-family: var(--font-heading);
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.step-desc {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.step-action-area {
+    margin-top: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.step-input-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.step-input-row input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    color: var(--text-main);
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+    outline: none;
+    font-family: var(--font-heading);
+}
+
+.step-input-row input:focus {
+    border-color: var(--cyan);
+}
+
+/* 2. Safety Presets */
+.safety-presets-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.preset-title {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.preset-btns-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+}
+
+.btn-preset {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+    padding: 0.45rem 0.25rem;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+}
+
+.btn-preset.safe:hover {
+    border-color: var(--green);
+    background: rgba(0, 230, 118, 0.04);
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.1);
+}
+
+.btn-preset.moderate:hover {
+    border-color: var(--cyan);
+    background: rgba(0, 242, 254, 0.04);
+    box-shadow: 0 0 10px rgba(0, 242, 254, 0.1);
+}
+
+.btn-preset.aggressive:hover {
+    border-color: var(--red);
+    background: rgba(255, 23, 68, 0.04);
+    box-shadow: 0 0 10px rgba(255, 23, 68, 0.1);
+}
+
+.btn-preset.active.safe {
+    border-color: var(--green);
+    background: rgba(0, 230, 118, 0.1);
+    box-shadow: 0 0 12px rgba(0, 230, 118, 0.25);
+}
+
+.btn-preset.active.moderate {
+    border-color: var(--cyan);
+    background: rgba(0, 242, 254, 0.1);
+    box-shadow: 0 0 12px rgba(0, 242, 254, 0.25);
+}
+
+.btn-preset.active.aggressive {
+    border-color: var(--red);
+    background: rgba(255, 23, 68, 0.1);
+    box-shadow: 0 0 12px rgba(255, 23, 68, 0.25);
+}
+
+.preset-pct {
+    font-size: 0.625rem;
+    opacity: 0.7;
+}
+
+/* 3. Liquidation Alerts inside Simulation Box */
+.liq-alert-box {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 10px;
+    background: rgba(255, 23, 68, 0.04);
+    border: 1px solid rgba(255, 23, 68, 0.15);
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.liq-alert-box.safe {
+    background: rgba(0, 230, 118, 0.03);
+    border-color: rgba(0, 230, 118, 0.15);
+    color: var(--green);
+}
+
+.liq-alert-box.warning {
+    background: rgba(255, 214, 0, 0.03);
+    border-color: rgba(255, 214, 0, 0.15);
+    color: var(--yellow);
+}
+
+.liq-alert-box.danger {
+    background: rgba(255, 23, 68, 0.05);
+    border-color: rgba(255, 23, 68, 0.25);
+    color: var(--red);
+}
+
+/* 4. Leverage Loop CSS styling */
+.leverage-mode-indicator {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, rgba(0, 242, 254, 0.03), rgba(155, 81, 224, 0.03));
+    border: 1px solid rgba(0, 242, 254, 0.15);
+    padding: 0.6rem 0.85rem;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    margin-bottom: 1rem;
+}
+
+.leverage-slider-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    padding: 0.85rem;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+}
+
+.leverage-val-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+}
+
+.slider-leverage {
+    width: 100%;
+    accent-color: var(--cyan);
+    height: 6px;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+.leverage-comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.comp-card {
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 10px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.comp-card.highlight {
+    background: rgba(0, 242, 254, 0.02);
+    border-color: rgba(0, 242, 254, 0.15);
+}
+
+.comp-title {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.comp-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+}
+
+.comp-row strong {
+    font-family: var(--font-heading);
+}
+
+.loop-steps-visual {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.loop-step-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.loop-step-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+}
+
+.loop-step-line.active {
+    color: var(--cyan);
+}
+
+.loop-step-line.active .loop-step-dot {
+    background: var(--cyan);
+    box-shadow: 0 0 6px var(--cyan);
+}
+
+/* Evicted TTL styling badge */
+.soroban-ttl-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.65rem;
+    background: rgba(0, 242, 254, 0.08);
+    border: 1px solid rgba(0, 242, 254, 0.2);
+    color: var(--cyan);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    margin-top: 0.2rem;
+    font-weight: 600;
+}
+
+/* Automated Keeper Bot Switch & Radar Scanning Premium CSS */
+
+/* Switch toggle styling */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.1);
+  transition: .4s;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 12px;
+  width: 12px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--text-muted);
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: rgba(168, 85, 247, 0.2);
+  border-color: var(--purple);
+}
+
+input:checked + .slider:before {
+  background-color: var(--purple);
+  transform: translateX(18px);
+  box-shadow: 0 0 8px var(--purple);
+}
+
+.slider.round {
+  border-radius: 34px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+/* Radar Scanning Animation */
+.radar-ping-container {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.radar-ping-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--purple);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--purple);
+  z-index: 2;
+}
+
+.radar-ping-ring {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--purple);
+  border-radius: 50%;
+  opacity: 0;
+  animation: radar-pulse 2s infinite linear;
+  z-index: 1;
+}
+
+.radar-ping-ring-2 {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--purple);
+  border-radius: 50%;
+  opacity: 0;
+  animation: radar-pulse 2s infinite linear;
+  animation-delay: 1s;
+  z-index: 1;
+}
+
+@keyframes radar-pulse {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+

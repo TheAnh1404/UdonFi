@@ -4,9 +4,10 @@ import type { Reserve } from '../types/lending';
 
 interface SystemReservesProps {
     reserves: Record<'XLM' | 'USDC', Reserve>;
+    onNavigate: () => void;
 }
 
-export const SystemReserves: React.FC<SystemReservesProps> = ({ reserves }) => {
+export const SystemReserves: React.FC<SystemReservesProps> = ({ reserves, onNavigate }) => {
     return (
         <div className="card glass-card pos-card glow-cyan" style={{ flex: '1.2' }}>
             <div className="card-header">
@@ -14,19 +15,51 @@ export const SystemReserves: React.FC<SystemReservesProps> = ({ reserves }) => {
                     <Database className="text-cyan animate-pulse" size={18} />
                     <span>Hệ Thống Bể Thanh Khoản (UdonFi Pools)</span>
                 </h3>
-                <span className="badge badge-success text-xs" style={{
-                    padding: '0.25rem 0.6rem',
-                    borderRadius: '20px',
-                    background: 'rgba(0, 230, 118, 0.1)',
-                    border: '1px solid rgba(0, 230, 118, 0.3)',
-                    color: 'var(--green)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.25rem'
-                }}>
-                    <ShieldCheck size={12} />
-                    Active Reserves
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <button 
+                        onClick={onNavigate}
+                        style={{
+                            background: 'rgba(0, 242, 254, 0.08)',
+                            border: '1px solid rgba(0, 242, 254, 0.3)',
+                            color: 'var(--cyan)',
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            transition: 'var(--transition-smooth)',
+                            boxShadow: '0 0 10px rgba(0, 242, 254, 0.1)',
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 242, 254, 0.15)';
+                            e.currentTarget.style.borderColor = 'rgba(0, 242, 254, 0.5)';
+                            e.currentTarget.style.boxShadow = '0 0 15px rgba(0, 242, 254, 0.2)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 242, 254, 0.08)';
+                            e.currentTarget.style.borderColor = 'rgba(0, 242, 254, 0.3)';
+                            e.currentTarget.style.boxShadow = '0 0 10px rgba(0, 242, 254, 0.1)';
+                        }}
+                    >
+                        Xem Chi Tiết Bể ↗
+                    </button>
+                    <span className="badge badge-success text-xs" style={{
+                        padding: '0.25rem 0.6rem',
+                        borderRadius: '20px',
+                        background: 'rgba(0, 230, 118, 0.1)',
+                        border: '1px solid rgba(0, 230, 118, 0.3)',
+                        color: 'var(--green)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem'
+                    }}>
+                        <ShieldCheck size={12} />
+                        Active Reserves
+                    </span>
+                </div>
             </div>
             
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>

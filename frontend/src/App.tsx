@@ -12,7 +12,8 @@ import { SorobanKinked } from './components/SorobanKinked';
 import { SorobanLiquidation } from './components/SorobanLiquidation';
 import { ConsoleLogger } from './components/ConsoleLogger';
 import { TradingViewChart } from './components/TradingViewChart';
-import type { Reserve, UserBalances, LogLine, LiqSandbox } from './types/lending';
+import { PoolsPage } from './components/PoolsPage.tsx';
+import type { Reserve, UserBalances, LogLine, LiqSandbox, Web3Tx } from './types/lending';
 import { Cpu, Hourglass, AreaChart, ShieldAlert } from 'lucide-react';
 
 const INITIAL_RESERVES: Record<'XLM' | 'USDC', Reserve> = {
@@ -72,11 +73,71 @@ const INITIAL_USER_BALANCES: UserBalances = {
     currentLedger: 641829
 };
 
+const INITIAL_TX_HISTORY: Web3Tx[] = [
+    {
+        id: 'tx-1',
+        timestamp: '13:58:12',
+        type: 'SUPPLY',
+        asset: 'USDC',
+        amount: 85000,
+        hash: 'GCSOROBANLENDINGPOOLSUPPLYUSDC85K8291XDJ19',
+        ledger: 641810,
+        account: 'GBWHALE7YV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDONFI',
+        cpuInstructions: 12000000
+    },
+    {
+        id: 'tx-2',
+        timestamp: '13:59:04',
+        type: 'SUPPLY',
+        asset: 'XLM',
+        amount: 320000,
+        hash: 'GCSOROBANLENDINGPOOLSUPPLYXLM320K283DJ1983',
+        ledger: 641815,
+        account: 'GBLPUSER2YV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDONFI',
+        cpuInstructions: 12000000
+    },
+    {
+        id: 'tx-3',
+        timestamp: '14:01:22',
+        type: 'BORROW',
+        asset: 'USDC',
+        amount: 35000,
+        hash: 'GCSOROBANLENDINGPOOLBORROWUSDC35K9281DJX98',
+        ledger: 641822,
+        account: 'GBINSTITUTIONAL2YV6W42C7G5LXTQ6N5L2G57Q3OULKNGW3S5Q3K36UX',
+        cpuInstructions: 18000000
+    },
+    {
+        id: 'tx-4',
+        timestamp: '14:02:10',
+        type: 'LIQUIDATION_PREPARE',
+        asset: 'XLM',
+        amount: 2000,
+        hash: 'GCSOROBAN2STEPLIQLOCKSESSION772615XJSH8192',
+        ledger: 641825,
+        account: 'GBKEEPERBOT7YV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDO',
+        cpuInstructions: 60000000
+    },
+    {
+        id: 'tx-5',
+        timestamp: '14:02:15',
+        type: 'LIQUIDATION_EXECUTE',
+        asset: 'XLM',
+        amount: 2000,
+        hash: 'GCSOROBAN2STEPLIQEXECUTESESSION772615XJSH81',
+        ledger: 641826,
+        account: 'GBKEEPERBOT7YV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDO',
+        cpuInstructions: 30000000
+    }
+];
+
 function App() {
     const [reserves, setReserves] = useState<Record<'XLM' | 'USDC', Reserve>>(INITIAL_RESERVES);
     const [userBalances, setUserBalances] = useState<UserBalances>(INITIAL_USER_BALANCES);
     const [wallet, setWallet] = useState({ isConnected: false, address: '' });
     const [logs, setLogs] = useState<LogLine[]>([]);
+    const [currentView, setCurrentView] = useState<'DASHBOARD' | 'POOLS'>('DASHBOARD');
+    const [txHistory, setTxHistory] = useState<Web3Tx[]>(INITIAL_TX_HISTORY);
     
     // Tab and modal panel controls
     const [activeTab, setActiveTab] = useState<'BITMAP' | 'TTL' | 'KINKED' | 'LIQUIDATION'>('BITMAP');
@@ -350,6 +411,25 @@ function App() {
             const renewedTtl = Math.min(6000, prev.ttl + 500);
             addLog('INFO', `Gia hạn thời gian sống dữ liệu TTL thêm 500 Ledgers (Mới: ${renewedTtl})`);
 
+            // Push to Web3 Transaction History
+            const txHash = 'GC' + Math.random().toString(36).substring(2, 12).toUpperCase() + Math.random().toString(36).substring(2, 12).toUpperCase();
+            const newTx: Web3Tx = {
+                id: 'tx-' + Math.random().toString(36).substring(2, 9),
+                timestamp: new Date().toLocaleTimeString(),
+                type: action === 'LEVERAGE' ? 'SUPPLY' : action,
+                asset: asset,
+                amount: amount,
+                hash: txHash,
+                ledger: prev.currentLedger,
+                account: wallet.address || 'GBUDONFIYV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDONFI',
+                cpuInstructions: action === 'SUPPLY' ? 12000000 
+                    : action === 'WITHDRAW' ? 15000000 
+                    : action === 'BORROW' ? 18000000 
+                    : action === 'REPAY' ? 14000000 
+                    : 35000000 // LEVERAGE
+            };
+            setTxHistory((prevTx) => [newTx, ...prevTx]);
+
             return {
                 ...prev,
                 wallet: newWallet,
@@ -503,6 +583,20 @@ function App() {
         const prefix = isBot ? '🤖 [Keeper Bot]: ' : '[Step 1] ';
         addLog(isBot ? 'SUCCESS' : 'EVENT', `${prefix}Kích hoạt prepare_liquidation() thành công.`);
         addLog('INFO', `${isBot ? '🤖 Bot Keeper: ' : ''}Soroban Session được đăng ký tại ledger với ID: ${mockSessionId}. Đã khóa ${activeSupply.toLocaleString(undefined, {maximumFractionDigits: 1})} XLM thế chấp. Tiêu thụ 60,000,000 CPU instructions.`);
+
+        // Push to Web3 Transaction History
+        const prepareTx: Web3Tx = {
+            id: 'tx-' + Math.random().toString(36).substring(2, 9),
+            timestamp: new Date().toLocaleTimeString(),
+            type: 'LIQUIDATION_PREPARE',
+            asset: 'XLM',
+            amount: activeSupply,
+            hash: 'GC' + Math.random().toString(36).substring(2, 12).toUpperCase() + Math.random().toString(36).substring(2, 12).toUpperCase(),
+            ledger: userBalances.currentLedger,
+            account: isBot ? 'GBKEEPERBOT7YV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDO' : (wallet.address || 'GBUDONFIYV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDONFI'),
+            cpuInstructions: 60000000
+        };
+        setTxHistory((prev) => [prepareTx, ...prev]);
     };
 
     const handleExecuteLiquidation = () => {
@@ -584,6 +678,20 @@ function App() {
         if (isRealP2PActive) {
             addLog('SUCCESS', `🤖 [P2P Settlement]: Đã khấu trừ ví Lending của bạn trên Ledger! Dư nợ USDC: 0.00, XLM thế chấp bị tịch thu: ${actualSeized.toFixed(1)}.`);
         }
+
+        // Push to Web3 Transaction History
+        const executeTx: Web3Tx = {
+            id: 'tx-' + Math.random().toString(36).substring(2, 9),
+            timestamp: new Date().toLocaleTimeString(),
+            type: 'LIQUIDATION_EXECUTE',
+            asset: 'XLM',
+            amount: actualSeized,
+            hash: 'GC' + Math.random().toString(36).substring(2, 12).toUpperCase() + Math.random().toString(36).substring(2, 12).toUpperCase(),
+            ledger: userBalances.currentLedger,
+            account: isBot ? 'GBKEEPERBOT7YV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDO' : (wallet.address || 'GBUDONFIYV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDONFI'),
+            cpuInstructions: 30000000
+        };
+        setTxHistory((prev) => [executeTx, ...prev]);
     };
 
     const handleResetSandbox = () => {
@@ -621,111 +729,130 @@ function App() {
                 wallet={wallet}
                 onConnect={handleConnectWallet}
                 onDisconnect={handleDisconnectWallet}
+                currentView={currentView}
+                onNavigate={setCurrentView}
             />
 
-            {/* Live real-time TradingView Chart */}
-            <TradingViewChart />
+            {currentView === 'DASHBOARD' ? (
+                <>
+                    {/* Live real-time TradingView Chart */}
+                    <TradingViewChart />
 
-            {/* Top row: Position Stats and Health Factor */}
-            <div className="dashboard-row pos-row">
-                <PositionStats reserves={reserves} userBalances={userBalances} wallet={wallet} />
-                <HealthFactorGauge healthFactor={mainHealthFactor} />
-            </div>
-
-            {/* System Reserves Pool State - Nằm riêng biệt bên dưới */}
-            <SystemReserves reserves={reserves} />
-
-            {/* Middle row: Market Table and Interaction Panel */}
-            <div className="dashboard-row market-row">
-                <MarketTable
-                    reserves={reserves}
-                    userBalances={userBalances}
-                    onAction={handleActionClick}
-                    onToggleCollateral={handleToggleCollateral}
-                />
-                
-                {isInteractionOpen && (
-                    <InteractionPanel
-                        reserves={reserves}
-                        userBalances={userBalances}
-                        activeAction={activeAction}
-                        activeAsset={activeAsset}
-                        onClose={() => setIsInteractionOpen(false)}
-                        onSubmit={handleTransactionSubmit}
-                        onToggleCollateral={handleToggleCollateral}
-                    />
-                )}
-            </div>
-
-            {/* Bottom Row: Soroban Specials Tabs */}
-            <div className="card glass-card soroban-row">
-                <div className="soroban-header">
-                    <div className="tab-pill-container">
-                        <button
-                            onClick={() => setActiveTab('BITMAP')}
-                            className={`soroban-tab-btn ${activeTab === 'BITMAP' ? 'active' : ''}`}
-                        >
-                            <Cpu size={14} />
-                            <span>128-bit Bitmap Matrix</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('TTL')}
-                            className={`soroban-tab-btn ${activeTab === 'TTL' ? 'active' : ''}`}
-                        >
-                            <Hourglass size={14} />
-                            <span>TTL Storage Life</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('KINKED')}
-                            className={`soroban-tab-btn ${activeTab === 'KINKED' ? 'active' : ''}`}
-                        >
-                            <AreaChart size={14} />
-                            <span>Kinked APY Curve</span>
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('LIQUIDATION')}
-                            className={`soroban-tab-btn ${activeTab === 'LIQUIDATION' ? 'active' : ''}`}
-                        >
-                            <ShieldAlert size={14} />
-                            <span>2-Step Liquidation Sandbox</span>
-                        </button>
+                    {/* Top row: Position Stats and Health Factor */}
+                    <div className="dashboard-row pos-row">
+                        <PositionStats reserves={reserves} userBalances={userBalances} wallet={wallet} />
+                        <HealthFactorGauge healthFactor={mainHealthFactor} />
                     </div>
-                </div>
-                <div className="card-body">
-                    {activeTab === 'BITMAP' && (
-                        <SorobanBitmap
-                            bitmap={userBalances.bitmap}
-                            onToggleBit={handleToggleBit}
-                        />
-                    )}
-                    {activeTab === 'TTL' && (
-                        <SorobanTtl
-                            ttl={userBalances.ttl}
-                            currentLedger={userBalances.currentLedger}
-                            onExtendTtl={handleExtendTtl}
-                        />
-                    )}
-                    {activeTab === 'KINKED' && (
-                        <SorobanKinked reserves={reserves} />
-                    )}
-                    {activeTab === 'LIQUIDATION' && (
-                        <SorobanLiquidation
+
+                    {/* System Reserves Pool State - Nằm riêng biệt bên dưới */}
+                    <SystemReserves reserves={reserves} onNavigate={() => setCurrentView('POOLS')} />
+
+                    {/* Middle row: Market Table and Interaction Panel */}
+                    <div className="dashboard-row market-row">
+                        <MarketTable
                             reserves={reserves}
-                            sandbox={{
-                                ...sandbox,
-                                supplyXLM: isRealP2PActive ? xlmSupplied : sandbox.supplyXLM,
-                                borrowUSDC: isRealP2PActive ? usdcDebt : sandbox.borrowUSDC
-                            }}
-                            isRealP2P={isRealP2PActive}
-                            onSlidePrice={handleSlideSandboxPrice}
-                            onToggleAutoKeeper={handleToggleAutoKeeper}
-                            onPrepare={handlePrepareLiquidation}
-                            onExecute={handleExecuteLiquidation}
-                            onReset={handleResetSandbox}
+                            userBalances={userBalances}
+                            onAction={handleActionClick}
+                            onToggleCollateral={handleToggleCollateral}
                         />
-                    )}
-                </div>
-            </div>
+                        
+                        {isInteractionOpen && (
+                            <InteractionPanel
+                                reserves={reserves}
+                                userBalances={userBalances}
+                                activeAction={activeAction}
+                                activeAsset={activeAsset}
+                                onClose={() => setIsInteractionOpen(false)}
+                                onSubmit={handleTransactionSubmit}
+                                onToggleCollateral={handleToggleCollateral}
+                            />
+                        )}
+                    </div>
+
+                    {/* Bottom Row: Soroban Specials Tabs */}
+                    <div className="card glass-card soroban-row">
+                        <div className="soroban-header">
+                            <div className="tab-pill-container">
+                                <button
+                                    onClick={() => setActiveTab('BITMAP')}
+                                    className={`soroban-tab-btn ${activeTab === 'BITMAP' ? 'active' : ''}`}
+                                >
+                                    <Cpu size={14} />
+                                    <span>128-bit Bitmap Matrix</span>
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('TTL')}
+                                    className={`soroban-tab-btn ${activeTab === 'TTL' ? 'active' : ''}`}
+                                >
+                                    <Hourglass size={14} />
+                                    <span>TTL Storage Life</span>
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('KINKED')}
+                                    className={`soroban-tab-btn ${activeTab === 'KINKED' ? 'active' : ''}`}
+                                >
+                                    <AreaChart size={14} />
+                                    <span>Kinked APY Curve</span>
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('LIQUIDATION')}
+                                    className={`soroban-tab-btn ${activeTab === 'LIQUIDATION' ? 'active' : ''}`}
+                                >
+                                    <ShieldAlert size={14} />
+                                    <span>2-Step Liquidation Sandbox</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="card-body">
+                            {activeTab === 'BITMAP' && (
+                                <SorobanBitmap
+                                    bitmap={userBalances.bitmap}
+                                    onToggleBit={handleToggleBit}
+                                />
+                            )}
+                            {activeTab === 'TTL' && (
+                                <SorobanTtl
+                                    ttl={userBalances.ttl}
+                                    currentLedger={userBalances.currentLedger}
+                                    onExtendTtl={handleExtendTtl}
+                                />
+                            )}
+                            {activeTab === 'KINKED' && (
+                                <SorobanKinked reserves={reserves} />
+                            )}
+                            {activeTab === 'LIQUIDATION' && (
+                                <SorobanLiquidation
+                                    reserves={reserves}
+                                    sandbox={{
+                                        ...sandbox,
+                                        supplyXLM: isRealP2PActive ? xlmSupplied : sandbox.supplyXLM,
+                                        borrowUSDC: isRealP2PActive ? usdcDebt : sandbox.borrowUSDC
+                                    }}
+                                    isRealP2P={isRealP2PActive}
+                                    onSlidePrice={handleSlideSandboxPrice}
+                                    onToggleAutoKeeper={handleToggleAutoKeeper}
+                                    onPrepare={handlePrepareLiquidation}
+                                    onExecute={handleExecuteLiquidation}
+                                    onReset={handleResetSandbox}
+                                />
+                            )}
+                        </div>
+                    </div>
+                </>
+            ) : (
+                <PoolsPage
+                    reserves={reserves}
+                    txHistory={txHistory}
+                    sandbox={sandbox}
+                    isRealP2P={isRealP2PActive}
+                    onSlidePrice={handleSlideSandboxPrice}
+                    onToggleAutoKeeper={handleToggleAutoKeeper}
+                    onPrepare={handlePrepareLiquidation}
+                    onExecute={handleExecuteLiquidation}
+                    onReset={handleResetSandbox}
+                    wallet={wallet}
+                />
+            )}
 
             {/* Logging terminal console */}
             <ConsoleLogger

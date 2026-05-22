@@ -51,3 +51,16 @@ export interface LiqSandbox {
     isAutoKeeperActive: boolean; // Simulates background automated keeper bot
 }
 
+export interface Web3Tx {
+    id: string;
+    timestamp: string;
+    type: 'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LIQUIDATION_PREPARE' | 'LIQUIDATION_EXECUTE';
+    asset: 'XLM' | 'USDC';
+    amount: number;
+    hash: string;      // Stellar transaction hash mô phỏng
+    ledger: number;
+    account: string;   // Địa chỉ ví Freighter thực hiện
+    cpuInstructions?: number; // CPU Instructions tiêu tốn
+}
+
+

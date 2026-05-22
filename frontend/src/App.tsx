@@ -442,37 +442,37 @@ function App() {
             let contractArgs: any[] = [];
             
             const assetAddress = asset === 'XLM' 
-                ? 'CDLZFC3SYJYDTI7KUBV72F3R2ULMZDCFR3CSOHXS2RI4FB67BIOWXLM' 
-                : 'CCUSDC3SYJYDTI7KUBV72F3R2ULMZDCFR3CSOHXS2RI4FB67BIOWUSDC';
+                ? 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC' 
+                : 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA';
 
             const amountWad = BigInt(Math.floor(amount * 1_000_000_000_000_000_000));
 
             if (action === 'SUPPLY') {
                 functionName = 'supply';
                 contractArgs = [
-                    new StellarSdk.Address(userAddress).toScVal(),
-                    new StellarSdk.Address(assetAddress).toScVal(),
+                    StellarSdk.Address.fromString(userAddress).toScVal(),
+                    StellarSdk.Address.fromString(assetAddress).toScVal(),
                     StellarSdk.nativeToScVal(amountWad, { type: 'i128' })
                 ];
             } else if (action === 'WITHDRAW') {
                 functionName = 'withdraw';
                 contractArgs = [
-                    new StellarSdk.Address(userAddress).toScVal(),
-                    new StellarSdk.Address(assetAddress).toScVal(),
+                    StellarSdk.Address.fromString(userAddress).toScVal(),
+                    StellarSdk.Address.fromString(assetAddress).toScVal(),
                     StellarSdk.nativeToScVal(amountWad, { type: 'i128' })
                 ];
             } else if (action === 'BORROW') {
                 functionName = 'borrow';
                 contractArgs = [
-                    new StellarSdk.Address(userAddress).toScVal(),
-                    new StellarSdk.Address(assetAddress).toScVal(),
+                    StellarSdk.Address.fromString(userAddress).toScVal(),
+                    StellarSdk.Address.fromString(assetAddress).toScVal(),
                     StellarSdk.nativeToScVal(amountWad, { type: 'i128' })
                 ];
             } else if (action === 'REPAY') {
                 functionName = 'repay';
                 contractArgs = [
-                    new StellarSdk.Address(userAddress).toScVal(),
-                    new StellarSdk.Address(assetAddress).toScVal(),
+                    StellarSdk.Address.fromString(userAddress).toScVal(),
+                    StellarSdk.Address.fromString(assetAddress).toScVal(),
                     StellarSdk.nativeToScVal(amountWad, { type: 'i128' })
                 ];
             } else if (action === 'LEVERAGE') {
@@ -481,7 +481,7 @@ function App() {
                 const finalSupply = amount * L;
                 const borrowedUsdc = amount * (L - 1) * reserves.XLM.price;
                 contractArgs = [
-                    new StellarSdk.Address(userAddress).toScVal(),
+                    StellarSdk.Address.fromString(userAddress).toScVal(),
                     StellarSdk.nativeToScVal(BigInt(Math.floor(finalSupply * 1_000_000_000_000_000_000)), { type: 'i128' }),
                     StellarSdk.nativeToScVal(BigInt(Math.floor(borrowedUsdc * 1_000_000_000_000_000_000)), { type: 'i128' })
                 ];
@@ -511,18 +511,32 @@ function App() {
                 gasFeeXlm = (Number(simulated.minResourceFee) + 100) / 10_000_000 || 0.01;
                 setTxDetails({ gasFeeXlm, cpuInstructions });
             } else {
-                addLog('ERROR', 'Mô phỏng giao dịch cục bộ không thành công. Sẽ dùng mặc định.');
-                setTxDetails({ gasFeeXlm: 0.01, cpuInstructions: 12000000 });
+                const rawError = (simulated as any).error || '';
+                let errorDetail = 'Lỗi không xác định từ RPC';
+                if (typeof rawError === 'string') {
+                    errorDetail = rawError;
+                } else if (rawError && typeof rawError === 'object') {
+                    errorDetail = rawError.message || JSON.stringify(rawError);
+                }
+                addLog('ERROR', `Mô phỏng giao dịch thất bại: ${errorDetail}`);
+                throw new Error(`Mô phỏng giao dịch thất bại: ${errorDetail} (Gợi ý: Hợp đồng có thể chưa được khởi tạo/add_reserve đầy đủ trên Testnet)`);
             }
 
             setTxState('SIGNING');
 
             addLog('EVENT', 'Đang mở ví Freighter yêu cầu người dùng KÝ giao dịch...');
             const xdrSigned = await signTransaction(tx.toXDR(), {
-                networkPassphrase: StellarSdk.Networks.TESTNET
+                networkPassphrase: StellarSdk.Networks.TESTNET,
+                address: userAddress
             });
 
             const signedXdr = typeof xdrSigned === 'string' ? xdrSigned : (xdrSigned as any)?.signedTxXdr;
+            const signError = (xdrSigned as any)?.error;
+
+            if (signError) {
+                throw new Error(`Ví Freighter từ chối ký: ${signError}`);
+            }
+
             if (!signedXdr) {
                 throw new Error('Không nhận được giao dịch đã ký từ Freighter.');
             }

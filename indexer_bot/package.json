@@ -4,7 +4,7 @@
   "description": "Realtime indexer and liquidation bot for UdonFi",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node run_indexer_loop.js"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^12.1.0",

@@ -4,20 +4,29 @@ const path = require('path');
 
 const adminAddr = "GCHCL7SUEVO2N46TPIVPAMQPK5BETF46RNAGN6Y5TKICVCZOWTHTNWQ4";
 const xlmAsset = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC";
-const usdcAsset = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA";
+const usdcAsset = "CAO2VFOWACEHKUJXGFDX5MOYFDGL2OANBOB3AK33CUR6R3A2Y5IC65XQ";
 
-const runStellar = (args) => {
-    console.log(`\n> Running: stellar ${args.join(' ')}`);
-    const res = spawnSync('stellar', args, { encoding: 'utf-8', shell: true });
-    if (res.status !== 0) {
-        console.error(`❌ Stellar CLI failed with exit status ${res.status}`);
-        console.error(`Error details:`, res.stderr);
-        throw new Error(`Stellar CLI failed.`);
+const runStellar = (args, maxRetries = 3) => {
+    // Auto-append high inclusion fee (0.1 XLM) to prioritize tx processing on congested testnet
+    if (!args.includes('--inclusion-fee')) {
+        args.push('--inclusion-fee', '1000000');
     }
-    // Clean up output a bit
-    const cleaned = res.stdout.trim();
-    console.log(cleaned);
-    return cleaned;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`\n> Running (Attempt ${attempt}/${maxRetries}): stellar ${args.join(' ')}`);
+        const res = spawnSync('stellar', args, { encoding: 'utf-8', shell: true });
+        if (res.status === 0) {
+            const cleaned = res.stdout.trim();
+            console.log(cleaned);
+            return cleaned;
+        }
+        console.warn(`⚠️ Attempt ${attempt} failed.`);
+        console.error(`Error details:`, res.stderr || res.stdout);
+        if (attempt === maxRetries) {
+            throw new Error(`Stellar CLI failed after ${maxRetries} attempts.`);
+        }
+        console.log(`Waiting 10 seconds before retrying...`);
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000);
+    }
 };
 
 try {

@@ -125,7 +125,7 @@ impl ReserveContract {
 
         // Update borrow index with compounded interest
         let borrow_multiplier = calculate_compounded_interest(
-            current_borrow_rate * RAY / WAD, // Convert WAD rate to RAY
+            current_borrow_rate.checked_mul(1_000_000_000).expect("rate overflow"), // Convert WAD rate to RAY
             time_delta,
         )
         .expect("interest calculation overflow");
@@ -135,7 +135,7 @@ impl ReserveContract {
 
         // Update liquidity index with linear interest
         let supply_multiplier = calculate_linear_interest(
-            current_supply_rate * RAY / WAD,
+            current_supply_rate.checked_mul(1_000_000_000).expect("rate overflow"),
             time_delta,
         )
         .expect("interest calculation overflow");

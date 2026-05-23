@@ -1128,7 +1128,7 @@ impl LendingPoolContract {
         }
 
         // Calculate new indices
-        let borrow_rate_ray = current_borrow_rate * RAY / WAD;
+        let borrow_rate_ray = current_borrow_rate.checked_mul(1_000_000_000).expect("rate overflow");
         let borrow_multiplier =
             calculate_compounded_interest(borrow_rate_ray, time_delta).unwrap_or(RAY);
         let new_bi = ray_mul(old_bi, borrow_multiplier).unwrap_or(old_bi);
@@ -1143,7 +1143,7 @@ impl LendingPoolContract {
         let supply_rate =
             calculate_supply_rate(current_borrow_rate, utilization, config.reserve_factor)
                 .unwrap_or(0);
-        let supply_rate_ray = supply_rate * RAY / WAD;
+        let supply_rate_ray = supply_rate.checked_mul(1_000_000_000).expect("rate overflow");
         let supply_multiplier =
             calculate_linear_interest(supply_rate_ray, time_delta).unwrap_or(RAY);
         let new_li = ray_mul(old_li, supply_multiplier).unwrap_or(old_li);

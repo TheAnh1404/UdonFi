@@ -172,7 +172,7 @@ export const SorobanLiquidation: React.FC<SorobanLiquidationProps> = ({
                             </h4>
                             <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.82rem', color: 'var(--text-dim)', lineHeight: '1.4' }}>
                                 Bạn chưa có vị thế nạp/vay thực tế. Sandbox đang chạy trên số dư giả định mẫu. 
-                                <strong style={{ color: 'var(--cyan)' }}> Hãy sang tab Thị Trường nạp thế chấp & vay USDC</strong> để bật P2P!
+                                <strong style={{ color: 'var(--cyan)' }}> Hãy sang tab Thị Trường nạp thế chấp & vay XLM</strong> để bật P2P!
                             </p>
                         </div>
                     </div>

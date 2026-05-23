@@ -1,9 +1,9 @@
 {
   "state": {
-    "globalTotalSupplied": 507343.7629525303,
-    "globalTotalBorrowed": 44212.516961053945,
+    "globalTotalSupplied": 500000.00524400396,
+    "globalTotalBorrowed": 45000.0022724031,
     "reserves": {},
     "users": {}
   },
-  "startLedger": 2705884
+  "startLedger": 2709827
 }

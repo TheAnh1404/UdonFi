@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wallet, LogOut, LayoutDashboard, Database, Coins, Zap, Bell, Trash2 } from 'lucide-react';
+import { Wallet, LogOut, LayoutDashboard, Database, Coins, Zap, Bell, Trash2, RefreshCw } from 'lucide-react';
 import type { Reserve } from '../types/lending';
 
 interface HeaderProps {
@@ -11,6 +11,9 @@ interface HeaderProps {
     onNavigate: (view: 'DASHBOARD' | 'MARKET' | 'POOLS' | 'SIMULATOR') => void;
     notifications: any[];
     onClearNotifications: () => void;
+    onResetProtocol: () => void;
+    autoResetEnabled: boolean;
+    onToggleAutoReset: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
@@ -21,7 +24,10 @@ export const Header: React.FC<HeaderProps> = ({
     currentView,
     onNavigate,
     notifications,
-    onClearNotifications
+    onClearNotifications,
+    onResetProtocol,
+    autoResetEnabled,
+    onToggleAutoReset
 }) => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     // Calculate TVL, Borrowed and Utilization Rate
@@ -270,6 +276,77 @@ export const Header: React.FC<HeaderProps> = ({
                             <span className="val">{utilization.toFixed(1)}%</span>
                         </div>
                     </div>
+
+                    {/* Auto-Reset Toggle Switch */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        background: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '8px',
+                        fontSize: '0.75rem',
+                        color: '#a0aec0',
+                        height: '34px',
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        transition: 'all 0.3s ease'
+                    }}
+                    onClick={onToggleAutoReset}
+                    onMouseEnter={(e) => e.currentTarget.style.border = '1px solid rgba(0, 242, 254, 0.3)'}
+                    onMouseLeave={(e) => e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.08)'}
+                    >
+                        <input 
+                            type="checkbox" 
+                            id="auto-reset-checkbox"
+                            checked={autoResetEnabled}
+                            onChange={(e) => e.stopPropagation()} // Prevent double trigger
+                            style={{ 
+                                cursor: 'pointer', 
+                                accentColor: '#00f2fe',
+                                width: '13px',
+                                height: '13px'
+                            }}
+                        />
+                        <label htmlFor="auto-reset-checkbox" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                            Tự Động Reset
+                        </label>
+                    </div>
+
+                    {/* Developer Reset Button */}
+                    <button 
+                        onClick={onResetProtocol}
+                        title="Tái triển khai & Reset toàn bộ hệ thống"
+                        style={{
+                            background: 'rgba(235, 94, 40, 0.08)',
+                            border: '1px solid rgba(235, 94, 40, 0.3)',
+                            color: '#eb5e28',
+                            width: '34px',
+                            height: '34px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            boxShadow: '0 0 8px rgba(235, 94, 40, 0.1)'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(235, 94, 40, 0.15)';
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(235, 94, 40, 0.25)';
+                            const svg = e.currentTarget.querySelector('svg');
+                            if (svg) svg.style.transform = 'rotate(180deg)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(235, 94, 40, 0.08)';
+                            e.currentTarget.style.boxShadow = '0 0 8px rgba(235, 94, 40, 0.1)';
+                            const svg = e.currentTarget.querySelector('svg');
+                            if (svg) svg.style.transform = 'rotate(0deg)';
+                        }}
+                    >
+                        <RefreshCw size={14} style={{ transition: 'transform 0.4s ease' }} />
+                    </button>
 
                     {/* Notification Dropdown Icon */}
                     <div className="notification-dropdown-wrapper" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>

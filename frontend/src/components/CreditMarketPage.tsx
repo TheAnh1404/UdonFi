@@ -35,6 +35,7 @@ interface CreditMarketPageProps {
     txState?: 'IDLE' | 'SIMULATING' | 'SIGNING' | 'SUBMITTING' | 'CONFIRMED' | 'FAILED';
     txDetails?: { gasFeeXlm: number; cpuInstructions: number; txHash?: string; error?: string };
     onResetTxState?: () => void;
+    onRegisterTrustline?: () => void;
 }
 
 export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
@@ -48,7 +49,8 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
     onExtendTtl,
     txState = 'IDLE',
     txDetails = { gasFeeXlm: 0, cpuInstructions: 0 },
-    onResetTxState = () => {}
+    onResetTxState = () => {},
+    onRegisterTrustline
 }) => {
     // Current operation state inside the wallet terminal
     const [activeAction, setActiveAction] = useState<'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE'>('SUPPLY');
@@ -287,6 +289,7 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
                         onResetTxState={onResetTxState}
                         onExtendTtl={onExtendTtl}
                         showCloseButton={false}
+                        onRegisterTrustline={onRegisterTrustline}
                     />
                 )}
             </div>

@@ -246,4 +246,217 @@ UdonFi mang đến một chuẩn mực mới trong thiết kế giao diện Web3
 
 ---
 
+## 🧪 6. Quy Trình Thử Nghiệm Đầy Đủ Các Chức Năng DeFi (Supply → Withdraw → Borrow → Repay)
+
+Phần này mô tả chi tiết từng bước để thử nghiệm toàn bộ vòng đời giao dịch DeFi trên UdonFi, bao gồm cơ chế **Tự Động Reset (Auto-Reset)** và quy trình **Redeploy & Reset Protocol** hoàn toàn.
+
+---
+
+### 📋 6.1 Điều Kiện Tiên Quyết (Prerequisites)
+
+Trước khi bắt đầu, hãy đảm bảo bạn đã hoàn tất các bước sau:
+
+| # | Yêu cầu | Cách thực hiện |
+|---|---------|----------------|
+| 1 | **Ví Freighter** đã cài đặt (Chrome Extension) | Cài tại [freighter.app](https://www.freighter.app/) → Đặt mạng **Testnet** |
+| 2 | **Tài khoản đã được kích hoạt** trên Stellar Testnet | Dùng [Friendbot](https://friendbot.stellar.org/?addr=YOUR_ADDRESS) hoặc chạy script: `node indexer_bot/fund_user.js` |
+| 3 | **Trustline USDC** đã được đăng ký | Trên giao diện UdonFi → Tab "Thị Trường Tín Dụng" → Nhấn nút **"Đăng Ký Trustline USDC"** |
+| 4 | **Frontend** đang chạy | `cd frontend && npm install && npm run dev` → Truy cập `http://localhost:5173` |
+| 5 | **Indexer Bot** đang chạy (tùy chọn) | `cd indexer_bot && npm install && npm start` → Lắng nghe tại `http://localhost:3001` |
+| 6 | **Smart Contracts** đã triển khai trên Testnet | Xem mục 6.5 bên dưới nếu cần redeploy lại |
+
+---
+
+### 💰 6.2 Nạp Tiền Vào Ví Cá Nhân (Fund Wallet)
+
+**Bước 1: Nạp XLM miễn phí từ Friendbot**
+
+Mở terminal và chạy:
+```bash
+cd indexer_bot
+node fund_user.js
+```
+Hoặc truy cập trực tiếp URL Friendbot với địa chỉ ví của bạn:
+```
+https://friendbot.stellar.org/?addr=YOUR_FREIGHTER_ADDRESS
+```
+> ⚠️ **Lưu ý:** Mỗi lần Friendbot nạp ~10,000 XLM vào ví Testnet. Bạn có thể gọi lại nếu cần thêm.
+
+**Bước 2: Nhận USDC Custom Token (để Supply/Borrow USDC)**
+
+USDC trên UdonFi sử dụng token tùy chỉnh với contract address:
+```
+CAO2VFOWACEHKUJXGFDX5MOYFDGL2OANBOB3AK33CUR6R3A2Y5IC65XQ
+```
+Liên hệ Admin hoặc sử dụng script `initialize_reserves.js` để mint USDC vào ví mục tiêu.
+
+---
+
+### 🔄 6.3 Quy Trình Thử Nghiệm Tuần Tự Các Chức Năng
+
+> **Thứ tự đề xuất:** `SUPPLY (Nạp)` → `WITHDRAW (Rút)` → `BORROW (Vay)` → `REPAY (Trả Nợ)`
+
+#### 🟢 Bước 1: NẠP TIỀN (SUPPLY)
+
+1. Vào tab **"Thị Trường Tín Dụng"** trên Dashboard
+2. Kết nối ví Freighter (nút "Kết Nối Ví Freighter")
+3. Chọn tab **"Nạp"** trên bảng tương tác phải
+4. Chọn tài sản: **XLM** hoặc **USDC**
+5. Nhập số lượng (ví dụ: `100 XLM`)
+6. Nhấn **"NẠP TIỀN VÀO BỂ THANH KHOẢN"**
+7. **Ký duyệt** trên popup Freighter
+
+**Kết quả mong đợi:**
+- ✅ Log hiển thị: `Chúc mừng! Giao dịch SUPPLY đã được xác nhận thành công`
+- ✅ Tx Hash được hiển thị và lưu vào lịch sử giao dịch
+- ✅ Số dư "Tổng Thế Chấp Nạp" tăng tương ứng
+- ✅ Bitmap LED Bit 0 (XLM Collateral) sáng xanh
+
+#### 🔵 Bước 2: RÚT TIỀN (WITHDRAW)
+
+> **Điều kiện:** Phải đã SUPPLY thành công trước đó
+
+1. Chọn tab **"Rút"** trên bảng tương tác
+2. Chọn cùng tài sản đã nạp (ví dụ: **XLM**)
+3. Nhập số lượng muốn rút (không vượt quá số đã nạp)
+4. Nhấn **"RÚT TIỀN VỀ VÍ"**
+5. **Ký duyệt** trên popup Freighter
+
+**Kết quả mong đợi:**
+- ✅ Log hiển thị: `Chúc mừng! Giao dịch WITHDRAW đã được xác nhận thành công`
+- ✅ Số dư ví tăng lại, số dư "Tổng Thế Chấp Nạp" giảm
+- ✅ Nếu rút hết → Bitmap LED tự tắt cờ Collateral
+
+> **⚠️ Lưu ý quan trọng:** Nếu bạn đang có khoản vay (Borrow), hệ thống sẽ kiểm tra Health Factor sau khi rút. Nếu HF < 1.0, giao dịch bị REVERT tự động trên Soroban VM.
+
+#### 🟣 Bước 3: VAY TIỀN (BORROW)
+
+> **Điều kiện:** Phải đã SUPPLY tài sản thế chấp VÀ bật cờ Collateral trước
+
+1. Chọn tab **"Vay"** trên bảng tương tác
+2. Chọn tài sản muốn vay (ví dụ: **USDC**)
+3. Nhập số lượng vay (phải ≤ 70% giá trị thế chấp — LTV tối đa)
+4. Kiểm tra **Health Factor mô phỏng** trên bảng trước khi submit
+5. Nhấn **"VAY TỪ BỂ THANH KHOẢN"**
+6. **Ký duyệt** trên popup Freighter
+
+**Kết quả mong đợi:**
+- ✅ Log hiển thị: `Chúc mừng! Giao dịch BORROW đã được xác nhận thành công`
+- ✅ Số dư ví USDC tăng, "Tổng Dư Nợ Vay" hiển thị số nợ
+- ✅ Health Factor Gauge cập nhật từ ∞ xuống giá trị cụ thể
+- ✅ Bitmap LED Bit 3 (USDC Borrow) sáng tím
+
+#### 🔴 Bước 4: TRẢ NỢ (REPAY)
+
+> **Điều kiện:** Phải đang có khoản vay
+
+1. Chọn tab **"Trả"** trên bảng tương tác
+2. Chọn tài sản đang nợ (ví dụ: **USDC**)
+3. Nhập số lượng trả (có thể dùng nút **MAX** để trả hết)
+4. Nhấn **"TRẢ NỢ CHO BỂ THANH KHOẢN"**
+5. **Ký duyệt** trên popup Freighter
+
+**Kết quả mong đợi:**
+- ✅ Log hiển thị: `Chúc mừng! Giao dịch REPAY đã được xác nhận thành công`
+- ✅ "Tổng Dư Nợ Vay" giảm tương ứng
+- ✅ Health Factor tăng lên (an toàn hơn)
+- ✅ Nếu trả hết → Bitmap LED tắt cờ Borrow, HF trở lại ∞
+
+---
+
+### ⚡ 6.4 Cơ Chế Tự Động Reset (Auto-Reset Protocol)
+
+UdonFi tích hợp tính năng **tự động reset protocol** sau mỗi giao dịch thành công, giúp bạn thử nghiệm liên tục nhiều kịch bản mà không cần reset thủ công.
+
+**Cách hoạt động:**
+1. Sau khi bất kỳ giao dịch nào (SUPPLY/WITHDRAW/BORROW/REPAY/LEVERAGE) thành công
+2. Hệ thống đợi **6 giây** rồi tự động kích hoạt Redeploy & Reset
+3. Protocol mới được triển khai với contract ID mới, trạng thái sạch
+4. Giao dịch trước đó vẫn được lưu trong **lịch sử Firestore**
+
+**Bật/Tắt Auto-Reset:**
+- Trên thanh Header có công tắc **"Auto Reset"** (Toggle Switch)
+- **BẬT (ON):** Mỗi giao dịch thành công → tự động reset sau 6s
+- **TẮT (OFF):** Giữ nguyên vị thế sau giao dịch để tiếp tục thử nghiệm thêm
+
+> 💡 **Kịch bản thử nghiệm đề xuất:**
+> 
+> | Kịch bản | Auto-Reset |
+> |----------|------------|
+> | Thử từng chức năng riêng lẻ (SUPPLY → Reset → BORROW → Reset...) | **BẬT** |
+> | Thử chuỗi liên tiếp (SUPPLY → BORROW → REPAY → WITHDRAW) | **TẮT** |
+> | Demo cho người xem | **BẬT** (mỗi lần mới, trạng thái sạch) |
+
+---
+
+### 🔧 6.5 Triển Khai Lại Toàn Bộ Protocol (Full Redeploy & Reset)
+
+Khi cần reset hoàn toàn hệ thống (ví dụ: lỗi trạng thái, contract hết hạn TTL, hoặc bắt đầu lại từ đầu):
+
+**Bước 1: Biên dịch Smart Contracts**
+```bash
+cd contracts
+cargo build --target wasm32v1-none --release
+```
+
+**Bước 2: Chạy script Redeploy**
+```bash
+node redeploy_entire_protocol.js
+```
+
+Script sẽ tự động:
+1. Deploy 7 hợp đồng mới (Oracle, Pool, Liquidation, 2 aToken, 2 debtToken)
+2. Initialize tất cả hợp đồng với cấu hình đúng
+3. Add Reserve XLM + USDC vào Lending Pool
+4. Thiết lập giá Oracle (XLM = $0.15, USDC = $1.00)
+5. In ra tất cả **Contract IDs mới**
+
+**Bước 3: Cập nhật Contract ID trong Frontend**
+
+Sau khi redeploy, lấy **Lending Pool ID** mới từ output và cập nhật vào file `frontend/src/App.tsx`:
+```typescript
+const POOL_CONTRACT_ID = 'NEW_POOL_CONTRACT_ID_HERE';  // Dòng 30
+```
+
+**Bước 4: Cập nhật Contract ID trong Indexer Bot**
+
+Cập nhật contract ID tương ứng trong `indexer_bot/index.js` nếu indexer cần theo dõi contract mới.
+
+**Bước 5: Khởi động lại Frontend & Indexer**
+```bash
+# Terminal 1: Frontend
+cd frontend && npm run dev
+
+# Terminal 2: Indexer Bot (tùy chọn)
+cd indexer_bot && npm start
+```
+
+---
+
+### 🔑 6.6 Bảng Tổng Hợp Các Contract ID Hiện Tại
+
+| Hợp đồng | Vai trò | Contract ID |
+|-----------|---------|-------------|
+| **Lending Pool Router** | Hợp đồng lõi xử lý Supply/Withdraw/Borrow/Repay | `CBP6X4XEFDSPJV7DCEQ7M4OEA2PZMXMHWMC3SE26FHOVC2AQQLZMWJY6` |
+| **XLM SAC (Native)** | Stellar Asset Contract cho XLM | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
+| **USDC Custom Token** | Token USDC tùy chỉnh cho UdonFi Testnet | `CAO2VFOWACEHKUJXGFDX5MOYFDGL2OANBOB3AK33CUR6R3A2Y5IC65XQ` |
+
+> ⚠️ **Lưu ý:** Các Contract ID sẽ thay đổi sau mỗi lần chạy `redeploy_entire_protocol.js`. Cần cập nhật vào Frontend sau mỗi lần redeploy.
+
+---
+
+### ❓ 6.7 Xử Lý Sự Cố Thường Gặp (Troubleshooting FAQ)
+
+| Sự cố | Nguyên nhân | Giải pháp |
+|-------|------------|-----------|
+| `Tài khoản chưa được kích hoạt` | Ví chưa có XLM trên Testnet | Chạy `node indexer_bot/fund_user.js` hoặc dùng Friendbot |
+| `Mô phỏng giao dịch thất bại` | Contract chưa khởi tạo / TTL hết hạn | Chạy `node contracts/redeploy_entire_protocol.js` |
+| `Health factor below threshold` | Rút/Vay quá nhiều so với thế chấp | Giảm số lượng hoặc nạp thêm thế chấp trước |
+| `failed host function` (USDC) | Chưa đăng ký Trustline USDC | Nhấn nút "Đăng Ký Trustline USDC" trên giao diện |
+| Ví không mở popup ký | Freighter chưa cấp quyền cho site | Mở Freighter → Settings → Security → Allow `localhost` |
+| `unexpected end of file` khi deploy | Testnet RPC quá tải / timeout | Script đã có retry tự động 3 lần với 0.1 XLM inclusion fee |
+| Auto-Reset không hoạt động | Công tắc Auto Reset đang TẮT | Bật công tắc "Auto Reset" trên Header |
+
+---
+
 *Được thiết kế tỉ mỉ. Được xây dựng cho tương lai của Web3. Chào mừng bạn đến với UdonFi.*

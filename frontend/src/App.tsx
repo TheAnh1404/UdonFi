@@ -27,7 +27,7 @@ const generateMockHash = () => {
     return hash.substring(0, 64).toLowerCase();
 };
 
-const POOL_CONTRACT_ID = 'CDC7IHZSUWN47NVQSQ6PLW7XWIG4RLIGIIMSC47IYGQ5YYQRPPKAEXU4';
+const POOL_CONTRACT_ID = 'CBP6X4XEFDSPJV7DCEQ7M4OEA2PZMXMHWMC3SE26FHOVC2AQQLZMWJY6';
 const RPC_URL = 'https://soroban-testnet.stellar.org';
 
 const INITIAL_RESERVES: Record<'XLM' | 'USDC', Reserve> = {
@@ -71,8 +71,8 @@ const INITIAL_RESERVES: Record<'XLM' | 'USDC', Reserve> = {
 
 const INITIAL_USER_BALANCES: UserBalances = {
     wallet: {
-        XLM: 12000,
-        USDC: 2500
+        XLM: 100000,
+        USDC: 1000000
     },
     suppliedScaled: {
         XLM: 0,
@@ -283,6 +283,50 @@ function App() {
     const [userBalances, setUserBalances] = useState<UserBalances>(INITIAL_USER_BALANCES);
     const [wallet, setWallet] = useState({ isConnected: false, address: '' });
     const [logs, setLogs] = useState<LogLine[]>([]);
+    const [isResetting, setIsResetting] = useState(false);
+    const [resetStatus, setResetStatus] = useState('');
+    const [autoResetEnabled, setAutoResetEnabled] = useState(false);
+
+    const handleResetProtocol = async (isAuto = false) => {
+        setIsResetting(true);
+        setResetStatus(isAuto ? '🔄 Phát hiện giao dịch VAY thành công! Đang tự động reset hệ thống...' : '🔄 Đang kích hoạt tiến trình tái triển khai hợp đồng & reset database...');
+        addLog('INFO', isAuto ? 'Đang tự động kích hoạt tiến trình reset giao thức...' : 'Đang kích hoạt tiến trình tái triển khai & reset...');
+
+        try {
+            const response = await fetch('http://localhost:3001/api/reset', {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (data.success) {
+                setResetStatus('✅ API đã kích hoạt reset! Đang dọn dẹp Firestore & deploy hợp đồng mới (khoảng 15s)...');
+                addLog('SUCCESS', 'Đã gửi yêu cầu reset tới API server thành công.');
+                
+                // Wait 15 seconds for the complete redeployment & reset to finish
+                let countdown = 15;
+                const interval = setInterval(() => {
+                    countdown--;
+                    if (countdown > 0) {
+                        setResetStatus(`✅ Đang deploy hợp đồng mới & khởi động lại indexer... (${countdown}s)`);
+                    } else {
+                        clearInterval(interval);
+                    }
+                }, 1000);
+
+                setTimeout(() => {
+                    setResetStatus('🔄 Đang tải lại trang...');
+                    addLog('SUCCESS', 'Reset hoàn tất! Trình duyệt đang tải lại...');
+                    window.location.reload();
+                }, 15000);
+            } else {
+                throw new Error(data.error || 'API reset trả về lỗi thất bại');
+            }
+        } catch (err: any) {
+            setIsResetting(false);
+            addLog('ERROR', `Lỗi kích hoạt reset hệ thống: ${err.message || err}`);
+            alert(`Lỗi reset: ${err.message || err}`);
+        }
+    };
+
     const [currentView, setCurrentView] = useState<'DASHBOARD' | 'MARKET' | 'POOLS' | 'SIMULATOR'>('DASHBOARD');
     const [toasts, setToasts] = useState<any[]>([]);
     const [notifications, setNotifications] = useState<any[]>([]);
@@ -368,6 +412,7 @@ function App() {
     }, []);
     const socketInitializedRef = useRef(false);
     const socketRef = useRef<any>(null);
+    const localSequenceRef = useRef<string | null>(null);
 
     // Soroban Transaction States
     const [txState, setTxState] = useState<'IDLE' | 'SIMULATING' | 'SIGNING' | 'SUBMITTING' | 'CONFIRMED' | 'FAILED'>('IDLE');
@@ -734,10 +779,12 @@ function App() {
         if (wallet.isConnected) {
             const realSupplyXLM = userBalances.suppliedScaled.XLM * reserves.XLM.liquidityIndex;
             const realBorrowUSDC = userBalances.debtScaled.USDC * reserves.USDC.borrowIndex;
+            const realBorrowXLM = userBalances.debtScaled.XLM * reserves.XLM.borrowIndex;
+            const totalDebtInUsd = realBorrowUSDC + (realBorrowXLM * reserves.XLM.price);
             setSandbox((prev) => ({
                 ...prev,
                 supplyXLM: realSupplyXLM,
-                borrowUSDC: realBorrowUSDC
+                borrowUSDC: totalDebtInUsd
             }));
         } else {
             setSandbox((prev) => ({
@@ -750,8 +797,11 @@ function App() {
         wallet.isConnected, 
         userBalances.suppliedScaled.XLM, 
         userBalances.debtScaled.USDC, 
+        userBalances.debtScaled.XLM,
         reserves.XLM.liquidityIndex, 
-        reserves.USDC.borrowIndex
+        reserves.USDC.borrowIndex,
+        reserves.XLM.borrowIndex,
+        reserves.XLM.price
     ]);
 
     // Socket.io integration to sync real-time events from indexer bot (Forwarded from Firestore via Admin SDK)
@@ -864,7 +914,26 @@ function App() {
             let sourceAccount;
             try {
                 const horizonServer = new StellarSdk.Horizon.Server('https://horizon-testnet.stellar.org');
-                sourceAccount = await horizonServer.loadAccount(userAddress);
+                const horizonAccount = await horizonServer.loadAccount(userAddress);
+                const horizonSeq = BigInt(horizonAccount.sequence);
+
+                // Sequence Lock Cache Comparison
+                let seqToUse = horizonSeq;
+                if (localSequenceRef.current) {
+                    const cachedSeq = BigInt(localSequenceRef.current);
+                    if (cachedSeq >= horizonSeq) {
+                        seqToUse = cachedSeq + 1n;
+                        addLog('SUCCESS', `🔒 [Sequence Lock] Phát hiện Horizon trễ. Sử dụng Sequence cục bộ tự tăng: ${seqToUse}`);
+                    } else {
+                        addLog('INFO', `Sử dụng Sequence mới từ Horizon: ${seqToUse}`);
+                    }
+                } else {
+                    addLog('INFO', `Sử dụng Sequence từ Horizon: ${seqToUse}`);
+                }
+
+                // Tạm thời set cache với sequence hiện tại để chuẩn bị build tx (sequence tiếp theo là seqToUse + 1)
+                localSequenceRef.current = seqToUse.toString();
+                sourceAccount = new StellarSdk.Account(userAddress, seqToUse.toString());
             } catch (e) {
                 addLog('ERROR', 'Tài khoản chưa được kích hoạt trên Testnet. Vui lòng nạp XLM qua Faucet (Friendbot).');
                 setTxState('FAILED');
@@ -877,7 +946,7 @@ function App() {
             
             const assetAddress = asset === 'XLM' 
                 ? 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC' 
-                : 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA';
+                : 'CAO2VFOWACEHKUJXGFDX5MOYFDGL2OANBOB3AK33CUR6R3A2Y5IC65XQ';
 
             const amountStroop = BigInt(Math.floor(amount * 10_000_000));
 
@@ -932,6 +1001,9 @@ function App() {
             .addOperation(operation)
             .setTimeout(30)
             .build();
+
+            // Cập nhật Sequence cache cục bộ bằng sequence đã dùng trong giao dịch này (seqToUse + 1)
+            localSequenceRef.current = sourceAccount.sequenceNumber();
 
             addLog('INFO', 'Đang mô phỏng giao dịch (Simulate Transaction) trên Soroban RPC...');
             let simulated = await server.simulateTransaction(tx);
@@ -1104,6 +1176,24 @@ function App() {
                 window.dispatchEvent(new CustomEvent('defi-money-flow', {
                     detail: { type: action, asset, amount }
                 }));
+
+                // Automatically reset protocol after any successful transaction (if enabled)
+                if (autoResetEnabled) {
+                    const actionMap: Record<string, string> = {
+                        SUPPLY: 'NẠP',
+                        WITHDRAW: 'RÚT',
+                        BORROW: 'VAY',
+                        REPAY: 'TRẢ NỢ',
+                        LEVERAGE: 'LEVERAGE'
+                    };
+                    const actionName = actionMap[action] || action;
+                    addLog('SYSTEM', `🔥 TỰ ĐỘNG RESET: Giao dịch ${actionName} thành công! Hệ thống sẽ tự động kích hoạt Redeploy & Reset sau 6 giây...`);
+                    setTimeout(() => {
+                        handleResetProtocol(true);
+                    }, 6000);
+                } else {
+                    addLog('SYSTEM', `ℹ️ Tự động reset đang tắt. Vị thế giao dịch ${action} được giữ lại để bạn tiếp tục thử nghiệm!`);
+                }
             } else {
                 throw new Error(`Transaction failed with status: ${txResult.status}`);
             }
@@ -1112,9 +1202,12 @@ function App() {
             console.error('Real Testnet Transaction Error:', err);
             let userFriendlyError = err.message || String(err);
             
+            // Reset local sequence cache on failure so the next action pulls fresh from Horizon (Self-Healing)
+            localSequenceRef.current = null;
+            
             // Suggest trustline if USDC fails and mentions trustline/missing entry
             if (asset === 'USDC' && (userFriendlyError.toLowerCase().includes('trustline') || userFriendlyError.toLowerCase().includes('missing') || userFriendlyError.toLowerCase().includes('failed host function'))) {
-                userFriendlyError += ' (Gợi ý: Địa chỉ ví của bạn có thể chưa đăng ký Trustline USDC trên Stellar Testnet. Vui lòng mở ví Freighter và thêm Token USDC với Address: CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA)';
+                userFriendlyError += ' (Gợi ý: Địa chỉ ví của bạn có thể chưa đăng ký Trustline USDC trên Stellar Testnet. Vui lòng mở ví Freighter và thêm Token USDC với Issuer: GCHCL7SUEVO2N46TPIVPAMQPK5BETF46RNAGN6Y5TKICVCZOWTHTNWQ4)';
             }
             
             addLog('ERROR', `⚠️ Tương tác blockchain thật thất bại: ${userFriendlyError}`);
@@ -1127,6 +1220,92 @@ function App() {
         }
     };
 
+    const handleRegisterTrustline = async () => {
+        if (!wallet.isConnected || !wallet.address) {
+            addLog('ERROR', 'Vui lòng kết nối ví Freighter trước!');
+            return;
+        }
+
+        addLog('INFO', '[Stellar Web3] Đang chuẩn bị đăng ký Trustline USDC...');
+        setTxState('SIMULATING');
+        setTxDetails({ gasFeeXlm: 0, cpuInstructions: 0 });
+
+        try {
+            const horizonServer = new StellarSdk.Horizon.Server('https://horizon-testnet.stellar.org');
+            
+            // Tải thông tin tài khoản và sequence mới nhất (áp dụng Sequence Lock)
+            const horizonAccount = await horizonServer.loadAccount(wallet.address);
+            const horizonSeq = BigInt(horizonAccount.sequence);
+            
+            let seqToUse = horizonSeq;
+            if (localSequenceRef.current) {
+                const cachedSeq = BigInt(localSequenceRef.current);
+                if (cachedSeq >= horizonSeq) {
+                    seqToUse = cachedSeq + 1n;
+                }
+            }
+            localSequenceRef.current = seqToUse.toString();
+
+            const sourceAccount = new StellarSdk.Account(wallet.address, seqToUse.toString());
+
+            // Build changeTrust operation for USDC Testnet
+            const usdcClassicAsset = new StellarSdk.Asset(
+                'USDC',
+                'GCHCL7SUEVO2N46TPIVPAMQPK5BETF46RNAGN6Y5TKICVCZOWTHTNWQ4'
+            );
+
+            const operation = StellarSdk.Operation.changeTrust({
+                asset: usdcClassicAsset
+            });
+
+            let tx = new StellarSdk.TransactionBuilder(sourceAccount, {
+                fee: StellarSdk.BASE_FEE,
+                networkPassphrase: StellarSdk.Networks.TESTNET
+            })
+            .addOperation(operation)
+            .setTimeout(30)
+            .build();
+
+            // Cập nhật sequence cache cục bộ
+            localSequenceRef.current = sourceAccount.sequenceNumber();
+
+            setTxState('SIGNING');
+            addLog('EVENT', 'Đang mở ví Freighter yêu cầu ký duyệt Trustline USDC...');
+            
+            const xdrSigned = await signTransaction(tx.toXDR(), {
+                networkPassphrase: StellarSdk.Networks.TESTNET,
+                address: wallet.address
+            });
+
+            const signedXdr = typeof xdrSigned === 'string' ? xdrSigned : (xdrSigned as any)?.signedTxXdr;
+            const signError = (xdrSigned as any)?.error;
+
+            if (signError) throw new Error(`Ví Freighter từ chối ký: ${signError}`);
+            if (!signedXdr) throw new Error('Không nhận được giao dịch đã ký từ Freighter.');
+
+            setTxState('SUBMITTING');
+            addLog('INFO', 'Đang phát giao dịch Trustline lên Stellar ledger...');
+            
+            const txSubmit = StellarSdk.TransactionBuilder.fromXDR(signedXdr, StellarSdk.Networks.TESTNET);
+            const submitResponse = await horizonServer.submitTransaction(txSubmit);
+
+            addLog('SUCCESS', `Đăng ký Trustline USDC thành công! Mã giao dịch: ${submitResponse.hash}`);
+            setTxState('CONFIRMED');
+            setTxDetails({ gasFeeXlm: 0.01, cpuInstructions: 0, txHash: submitResponse.hash });
+            
+            // Cập nhật lại số dư
+            await fetchUserBalancesAndContractState(wallet.address);
+        } catch (err: any) {
+            console.error('USDC Trustline Error:', err);
+            localSequenceRef.current = null;
+            let errMsg = err.message || String(err);
+            addLog('ERROR', `⚠️ Đăng ký Trustline thất bại: ${errMsg}`);
+            setTxState('FAILED');
+            setTxDetails({ gasFeeXlm: 0, cpuInstructions: 0, error: errMsg });
+        }
+    };
+
+    // @ts-ignore
     const executeFallbackTransaction = (
         action: 'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE',
         asset: 'XLM' | 'USDC',
@@ -1480,8 +1659,14 @@ function App() {
                     newBitmap &= ~(1n << 0n);
                 }
 
+                // Update wallet balances (paid USDC, received XLM)
+                let newWallet = { ...prev.wallet };
+                newWallet.USDC = Math.max(0, newWallet.USDC - debtPaid);
+                newWallet.XLM = Math.max(0, newWallet.XLM + actualSeized);
+
                 return {
                     ...prev,
+                    wallet: newWallet,
                     suppliedScaled: newSuppliedScaled,
                     debtScaled: newDebtScaled,
                     bitmap: newBitmap
@@ -1494,6 +1679,17 @@ function App() {
                 supplyXLM: Math.max(0, prev.supplyXLM - actualSeized),
                 borrowUSDC: 0
             }));
+
+            // Also update the user's wallet balances in mock simulation!
+            updateUserBalances((prev) => {
+                let newWallet = { ...prev.wallet };
+                newWallet.USDC = Math.max(0, newWallet.USDC - debtPaid);
+                newWallet.XLM = Math.max(0, newWallet.XLM + actualSeized);
+                return {
+                    ...prev,
+                    wallet: newWallet
+                };
+            });
         }
 
         // Sync pool reserves dynamically with Firestore pool state
@@ -1508,6 +1704,7 @@ function App() {
         const prefix = isBot ? '🤖 [Keeper Bot]: ' : '[Step 2] ';
         addLog('SUCCESS', `${prefix}Kích hoạt execute_liquidation() thành công.`);
         addLog('SUCCESS', `${isBot ? '🤖 Bot Keeper: ' : ''}Đã tự động thanh toán nợ: ${debtPaid.toFixed(2)} USDC. Tịch thu ${actualSeized.toFixed(1)} XLM thế chấp (Bao gồm 5% thưởng thanh lý).`);
+        addLog('SUCCESS', `💰 [Cập nhật ví]: Ví của bạn đã được cập nhật: -${debtPaid.toFixed(2)} USDC (thanh toán nợ) và +${actualSeized.toFixed(1)} XLM (tịch thu thế chấp).`);
         addLog('INFO', `${isBot ? '🤖 Bot Keeper: ' : ''}Soroban VM: Giải phóng phiên ID ${sandbox.sessionId}. Tiêu thụ 30,000,000 CPU instructions. Tổng CPU 2 bước: 90,000,000 (Dưới ngưỡng 100M).`);
         if (isRealP2PActive) {
             addLog('SUCCESS', `🤖 [P2P Settlement]: Đã khấu trừ ví Lending của bạn trên Ledger! Dư nợ USDC: 0.00, XLM thế chấp bị tịch thu: ${actualSeized.toFixed(1)}.`);
@@ -1549,6 +1746,8 @@ function App() {
     const handleResetSandbox = () => {
         const realSupplyXLM = wallet.isConnected ? userBalances.suppliedScaled.XLM * reserves.XLM.liquidityIndex : 0;
         const realBorrowUSDC = wallet.isConnected ? userBalances.debtScaled.USDC * reserves.USDC.borrowIndex : 0;
+        const realBorrowXLM = wallet.isConnected ? userBalances.debtScaled.XLM * reserves.XLM.borrowIndex : 0;
+        const totalDebtInUsd = realBorrowUSDC + (realBorrowXLM * reserves.XLM.price);
         
         setSandbox((prev) => ({
             ...prev,
@@ -1557,7 +1756,7 @@ function App() {
             sessionId: null,
             isAutoKeeperActive: false,
             supplyXLM: realSupplyXLM,
-            borrowUSDC: realBorrowUSDC
+            borrowUSDC: totalDebtInUsd
         }));
         
         if (wallet.isConnected && (realSupplyXLM > 0 || realBorrowUSDC > 0)) {
@@ -1569,6 +1768,104 @@ function App() {
 
     return (
         <div className="app-container">
+            <style>{`
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+                @keyframes spin-reverse {
+                    0% { transform: rotate(360deg); }
+                    100% { transform: rotate(0deg); }
+                }
+            `}</style>
+
+            {isResetting && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    width: '100vw',
+                    height: '100vh',
+                    background: 'rgba(8, 12, 28, 0.95)',
+                    backdropFilter: 'blur(30px)',
+                    zIndex: 99999,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    gap: '1.5rem',
+                    fontFamily: "'Outfit', 'Inter', sans-serif"
+                }}>
+                    {/* Glowing Spin Loader */}
+                    <div style={{
+                        position: 'relative',
+                        width: '80px',
+                        height: '80px'
+                    }}>
+                        <div style={{
+                            position: 'absolute',
+                            width: '100%',
+                            height: '100%',
+                            border: '4px solid rgba(0, 242, 254, 0.1)',
+                            borderTop: '4px solid var(--cyan)',
+                            borderRadius: '50%',
+                            animation: 'spin 1.2s linear infinite',
+                            boxShadow: '0 0 15px rgba(0, 242, 254, 0.2)'
+                        }}></div>
+                        <div style={{
+                            position: 'absolute',
+                            width: '70%',
+                            height: '70%',
+                            top: '15%',
+                            left: '15%',
+                            border: '4px solid rgba(155, 81, 224, 0.1)',
+                            borderBottom: '4px solid var(--purple)',
+                            borderRadius: '50%',
+                            animation: 'spin-reverse 1.5s linear infinite',
+                            boxShadow: '0 0 15px rgba(155, 81, 224, 0.2)'
+                        }}></div>
+                    </div>
+
+                    <div style={{ textAlign: 'center', maxWidth: '500px', padding: '0 2rem' }}>
+                        <h2 style={{
+                            fontSize: '1.5rem',
+                            fontWeight: 800,
+                            background: 'linear-gradient(135deg, var(--cyan), var(--purple))',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            marginBottom: '0.75rem',
+                            letterSpacing: '-0.02em'
+                        }}>
+                            RESETTING PROTOCOL ENVIRONMENT
+                        </h2>
+                        <p style={{
+                            fontSize: '0.9rem',
+                            color: 'var(--text-bright)',
+                            lineHeight: '1.6',
+                            margin: 0,
+                            textShadow: '0 2px 10px rgba(0,0,0,0.5)'
+                        }}>
+                            {resetStatus}
+                        </p>
+                    </div>
+
+                    <div style={{
+                        fontSize: '0.7rem',
+                        color: 'var(--text-muted)',
+                        letterSpacing: '0.05em',
+                        textTransform: 'uppercase',
+                        marginTop: '1rem',
+                        borderTop: '1px solid rgba(255,255,255,0.05)',
+                        paddingTop: '0.8rem',
+                        width: '260px',
+                        textAlign: 'center'
+                    }}>
+                        UdonFi Developer Toolkit
+                    </div>
+                </div>
+            )}
+
             <MoneyFlowOverlay />
             {/* Ambient Background Glows */}
             <div className="bg-glow-container">
@@ -1587,6 +1884,9 @@ function App() {
                 onNavigate={handleNavigate}
                 notifications={notifications}
                 onClearNotifications={() => setNotifications([])}
+                onResetProtocol={handleResetProtocol}
+                autoResetEnabled={autoResetEnabled}
+                onToggleAutoReset={() => setAutoResetEnabled(prev => !prev)}
             />
 
             {currentView === 'DASHBOARD' ? (
@@ -1753,6 +2053,7 @@ function App() {
                     txState={txState}
                     txDetails={txDetails}
                     onResetTxState={handleResetTxState}
+                    onRegisterTrustline={handleRegisterTrustline}
                 />
             ) : currentView === 'POOLS' ? (
                 <PoolsPage

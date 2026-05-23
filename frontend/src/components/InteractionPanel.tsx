@@ -17,6 +17,7 @@ interface InteractionPanelProps {
     onResetTxState?: () => void;
     onExtendTtl?: () => void;
     showCloseButton?: boolean;
+    onRegisterTrustline?: () => void;
 }
 
 export const InteractionPanel: React.FC<InteractionPanelProps> = ({
@@ -31,7 +32,8 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
     txDetails = { gasFeeXlm: 0, cpuInstructions: 0 },
     onResetTxState = () => {},
     onExtendTtl = () => {},
-    showCloseButton = true
+    showCloseButton = true,
+    onRegisterTrustline
 }) => {
     const [action, setAction] = useState<ActionType>(activeAction);
     const [asset, setAsset] = useState<'XLM' | 'USDC'>(propAsset);
@@ -45,16 +47,26 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
     // Keep state synced with props when they change
     useEffect(() => {
         setAction(activeAction);
+        if (activeAction === 'BORROW') {
+            setAsset('XLM');
+        }
     }, [activeAction]);
 
     useEffect(() => {
-        setAsset(propAsset);
-    }, [propAsset]);
+        if (action === 'BORROW') {
+            setAsset('XLM');
+        } else {
+            setAsset(propAsset);
+        }
+    }, [propAsset, action]);
 
     // Clear input on tab or asset change
     useEffect(() => {
         setAmountStr('');
         setIsLeverageMode(false);
+        if (action === 'BORROW' && asset !== 'XLM') {
+            setAsset('XLM');
+        }
     }, [action, asset]);
 
     const reserve = reserves[asset];
@@ -242,9 +254,14 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
     let isRevert = false;
     let revertReason = '';
 
+    const poolLiquidity = Math.max(0, reserve.totalSupplied - reserve.totalBorrowed);
+
     if (amount > referenceBalance && (action === 'SUPPLY' || action === 'WITHDRAW' || action === 'REPAY') && !isLeverageMode) {
         isRevert = true;
         revertReason = `Số lượng nhập vào vượt quá ${balanceLabel.toLowerCase()} khả dụng!`;
+    } else if (action === 'BORROW' && amount > poolLiquidity) {
+        isRevert = true;
+        revertReason = `Bể thanh khoản không đủ số dư để cho vay! (Thanh khoản khả dụng: ${poolLiquidity.toLocaleString(undefined, {maximumFractionDigits: 2})} ${asset})`;
     } else if (action === 'WITHDRAW' && amount > (asset === 'XLM' ? currentXlmSupplied : currentUsdcSupplied)) {
         isRevert = true;
         revertReason = 'Bạn không thể rút nhiều hơn số lượng đã nạp!';
@@ -364,10 +381,18 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                         </button>
                     )}
                     {txState === 'FAILED' && (
-                        <button type="button" onClick={onResetTxState} className="btn btn-purple btn-sm" style={{ paddingLeft: '2rem', paddingRight: '2rem' }}>
-                            <Play size={14} />
-                            <span>Thử Lại</span>
-                        </button>
+                        <div style={{ display: 'flex', gap: '0.5rem', width: '100%', justifyContent: 'center', marginTop: '0.5rem' }}>
+                            <button type="button" onClick={onResetTxState} className="btn btn-purple btn-sm" style={{ paddingLeft: '1.5rem', paddingRight: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <Play size={12} />
+                                <span>Thử Lại</span>
+                            </button>
+                            {onRegisterTrustline && txDetails.error?.toLowerCase().includes('trustline') && (
+                                <button type="button" onClick={onRegisterTrustline} className="btn btn-cyan btn-sm" style={{ paddingLeft: '1.5rem', paddingRight: '1.5rem', boxShadow: '0 0 12px rgba(0, 242, 254, 0.4)', border: '1px solid var(--cyan)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <Zap size={12} />
+                                    <span>Tạo Trustline USDC 1-Click</span>
+                                </button>
+                            )}
+                        </div>
                     )}
                 </div>
             )}
@@ -411,7 +436,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                             onClick={() => setAsset('USDC')}
                             className={`btn-connect btn-sm ${asset === 'USDC' ? 'active-asset' : ''}`}
                             style={{ flex: 1, borderColor: asset === 'USDC' ? 'var(--cyan)' : 'rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'center' }}
-                            disabled={isLeverageMode}
+                            disabled={isLeverageMode || action === 'BORROW'}
                         >
                             USDC (Stablecoin)
                         </button>
@@ -507,6 +532,19 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                             </div>
                             <div className="risk-warning-body">
                                 Đòn bẩy <strong>{leverageFactor.toFixed(1)}x</strong> yêu cầu thực hiện hoán đổi (swap) một khối lượng lớn USDC/XLM qua Stellar DEX. Trượt giá ước tính có thể vượt <strong>1.5%</strong>, làm tăng nguy cơ bị thanh lý vị thế sớm.
+                            </div>
+                        </div>
+                    )}
+
+                    {/* XLM Borrowing USD Peg Notice */}
+                    {action === 'BORROW' && (
+                        <div className="risk-warning-card risk-info" style={{ borderColor: 'rgba(0, 242, 254, 0.3)', background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.03) 0%, rgba(121, 40, 202, 0.03) 100%)' }}>
+                            <div className="risk-warning-header text-cyan">
+                                <Info size={16} className="text-cyan animate-pulse" />
+                                <span style={{ color: 'var(--cyan)' }}>ƯU TIÊN VAY XLM (QUY ĐỔI USD)</span>
+                            </div>
+                            <div className="risk-warning-body">
+                                Nhận tài sản vay bằng <strong>XLM</strong> quy đổi tương đương sang đô la (tỷ giá cố định <strong>1 XLM = ${reserves.XLM.price}</strong>). Sự thay đổi này giúp bạn dễ dàng ký và tạo hash giao dịch thật tức thì trên <strong>Stellar Expert</strong> do bể đã sẵn nguồn thanh khoản XLM dồi dào.
                             </div>
                         </div>
                     )}
@@ -607,16 +645,16 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                             <div className={`step-card ${wizardStep === 3 ? 'active' : 'locked'}`}>
                                 <div className="step-badge">3</div>
                                 <div className="step-content">
-                                    <span className="step-title">Thực Hiện Khoản Vay USDC</span>
+                                    <span className="step-title">Thực Hiện Khoản Vay XLM (Quy Đổi USD)</span>
                                     <span className="step-desc">
-                                        Hạn mức vay của bạn đã mở! Hãy nhập số lượng USDC cần vay về ví.
+                                        Hạn mức vay của bạn đã mở! Hãy nhập số lượng XLM cần vay (quy đổi tương đương USD).
                                     </span>
                                     {wizardStep === 3 && (
                                         <div className="step-action-area">
                                             <div className="step-input-row">
                                                 <input
                                                     type="number"
-                                                    placeholder="Lượng USDC cần vay"
+                                                    placeholder="Lượng XLM cần vay"
                                                     value={amountStr}
                                                     onChange={(e) => setAmountStr(e.target.value)}
                                                 />
@@ -624,7 +662,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                                                     type="button"
                                                     disabled={amount <= 0 || isRevert}
                                                     onClick={() => {
-                                                        onSubmit('BORROW', 'USDC', amount);
+                                                        onSubmit('BORROW', 'XLM', amount);
                                                         setAmountStr('');
                                                     }}
                                                     className="btn btn-sm btn-purple"
@@ -632,8 +670,14 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                                                     <span>Vay ngay</span>
                                                 </button>
                                             </div>
-                                            <span style={{ fontSize: '0.65rem', color: 'var(--cyan)' }}>
-                                                Hạn mức vay tối đa của bạn: ${referenceBalance.toFixed(2)} USDC
+                                            {amount > 0 && (
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-main)', marginTop: '0.25rem', display: 'flex', justifyContent: 'space-between', padding: '0.25rem 0.5rem', backgroundColor: 'rgba(0, 242, 254, 0.05)', borderRadius: '4px' }}>
+                                                    <span style={{ color: 'var(--text-muted)' }}>Giá trị quy đổi:</span>
+                                                    <strong className="text-cyan">${(amount * reserves.XLM.price).toFixed(2)} USD</strong>
+                                                </div>
+                                            )}
+                                            <span style={{ fontSize: '0.65rem', color: 'var(--cyan)', display: 'block', marginTop: '0.25rem' }}>
+                                                Hạn mức vay tối đa của bạn: {referenceBalance.toFixed(2)} XLM (~ ${(referenceBalance * reserves.XLM.price).toFixed(2)} USD)
                                             </span>
                                         </div>
                                     )}
@@ -796,8 +840,11 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                             {/* Balance reference */}
                             <div className="form-row-bal">
                                 <span className="input-label">{balanceLabel}</span>
-                                <span className="input-bal-ref">
-                                    {referenceBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })} {asset}
+                                <span className="input-bal-ref" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                    <span>{referenceBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })} {asset}</span>
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--cyan)', opacity: 0.85 }}>
+                                        (~ ${(referenceBalance * reserves[asset].price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                                    </span>
                                 </span>
                             </div>
 
@@ -813,6 +860,15 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                                 />
                                 <span className="input-suffix">{asset}</span>
                             </div>
+
+                            {amount > 0 && (
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-main)', marginTop: '0.4rem', padding: '0.35rem 0.5rem', backgroundColor: 'rgba(0, 242, 254, 0.05)', borderRadius: '4px', borderLeft: '2px solid var(--cyan)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>Giá trị quy đổi USD:</span>
+                                    <strong className="text-cyan">
+                                        ${(amount * reserves[asset].price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', fontWeight: 'normal' }}>(tỷ giá: ${reserves[asset].price})</span>
+                                    </strong>
+                                </div>
+                            )}
 
                             {/* Percent shortcuts */}
                             <div className="quick-pct-btns" style={{ marginBottom: action === 'BORROW' ? '0.5rem' : '1rem' }}>

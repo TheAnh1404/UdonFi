@@ -25,7 +25,7 @@ const xlmConfig = {
 
 const usdcConfig = {
     a_token: aTokenUsdcId,
-    asset: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+    asset: "CAO2VFOWACEHKUJXGFDX5MOYFDGL2OANBOB3AK33CUR6R3A2Y5IC65XQ",
     debt_token: debtTokenUsdcId,
     decimals: 7,
     is_active: true,

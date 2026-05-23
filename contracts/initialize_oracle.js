@@ -37,7 +37,7 @@ try {
         '--send', 'yes',
         '--',
         'set_price',
-        '--asset', "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+        '--asset', "CAO2VFOWACEHKUJXGFDX5MOYFDGL2OANBOB3AK33CUR6R3A2Y5IC65XQ",
         '--price_wad', "1000000000000000000"
     ]);
 

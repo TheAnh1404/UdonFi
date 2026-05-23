@@ -9,7 +9,7 @@ const path = require('path');
 const { db } = require('./firebase');
 
 // Config
-const POOL_CONTRACT_ID = 'CDC7IHZSUWN47NVQSQ6PLW7XWIG4RLIGIIMSC47IYGQ5YYQRPPKAEXU4';
+const POOL_CONTRACT_ID = 'CBP6X4XEFDSPJV7DCEQ7M4OEA2PZMXMHWMC3SE26FHOVC2AQQLZMWJY6';
 const RPC_URL = process.env.SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
 const sorobanServer = new rpc.Server(RPC_URL);
 const STATE_FILE_PATH = path.join(__dirname, 'state.json');
@@ -177,7 +177,7 @@ function mapAssetSymbol(assetAddress) {
     if (addrStr.includes('CDLZFC') || addrStr === 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC') {
         return 'XLM';
     }
-    if (addrStr.includes('CBIELT') || addrStr === 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA') {
+    if (addrStr.includes('CAO2VF') || addrStr === 'CAO2VFOWACEHKUJXGFDX5MOYFDGL2OANBOB3AK33CUR6R3A2Y5IC65XQ') {
         return 'USDC';
     }
     return 'XLM';
@@ -442,9 +442,49 @@ io.on('connection', (socket) => {
     });
 });
 
+// CORS Middleware for Reset API
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    if (req.method === "OPTIONS") {
+        return res.sendStatus(200);
+    }
+    next();
+});
+
+// Trigger Redeploy and Reset Flow API
+app.post('/api/reset', async (req, res) => {
+    console.log("🔄 API Request: Triggering redeployment and reset...");
+    try {
+        const { spawn } = require('child_process');
+        const scriptPath = path.join(__dirname, 'redeploy_and_reset_flow.js');
+        
+        // Spawn redeployment detached
+        const child = spawn('node', [scriptPath], {
+            detached: true,
+            stdio: 'inherit',
+            shell: true
+        });
+        child.unref();
+
+        res.json({ success: true, message: "Redeployment and reset triggered successfully!" });
+        
+        // Exit process so that loop scripts restart us
+        setTimeout(() => {
+            console.log("Shutting down indexer process for reset...");
+            process.exit(0);
+        }, 1500);
+    } catch (err) {
+        console.error("Failed to trigger reset:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Start API Server
 const PORT = process.env.PORT || 3001;
 http.listen(PORT, () => {
     console.log(`🌐 Realtime WebSocket API running on port ${PORT}`);
     pollSorobanEvents();
 });
+

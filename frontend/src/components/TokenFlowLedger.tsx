@@ -196,7 +196,7 @@ const DetailedRow: React.FC<{
                         Ví: <span style={{ color: 'var(--text-bright)' }}>{tx.account.slice(0, 6)}...{tx.account.slice(-6)}</span>
                     </div>
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontFamily: 'monospace' }}>
-                        Tx Hash: <span style={{ color: 'var(--cyan)' }}>{tx.hash.slice(0, 8)}...{tx.hash.slice(-8)}</span>
+                        Tx Hash: <a href={`https://stellar.expert/explorer/testnet/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--cyan)', textDecoration: 'none' }} className="chip-interactive">{tx.hash.slice(0, 8)}...{tx.hash.slice(-8)}</a>
                     </div>
                     {tx.cpuInstructions && (
                         <div style={{ background: 'rgba(255,183,77,0.03)', border: '1px solid rgba(255,183,77,0.15)', padding: '0.2rem 0.55rem', borderRadius: '6px', fontFamily: 'monospace', color: '#ffb74d', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -259,11 +259,13 @@ const DetailedRow: React.FC<{
                                     className="chip-interactive"
                                     title="Sao chép Tx Hash"
                                 >
-                                    <span>{tx.hash.slice(0, 12)}...{tx.hash.slice(-12)}</span>
+                                    <span>
+                                        {tx.hash.slice(0, 12)}...{tx.hash.slice(-12)}
+                                    </span>
                                     {copiedTxId === tx.id + '-hash' ? <Check size={12} style={{ color: 'var(--green)' }} /> : <Copy size={12} />}
                                 </div>
                                 <a
-                                    href={`https://stellar.expert/explorer/public/tx/${tx.hash}`}
+                                    href={`https://stellar.expert/explorer/testnet/tx/${tx.hash}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     title="Xem trên StellarExpert Explorer"
@@ -352,7 +354,7 @@ const DenseRow: React.FC<{
                     {tx.account.slice(0, 4)}...{tx.account.slice(-4)}
                 </span>
                 <span style={{ textAlign: 'center', fontFamily: 'monospace', color: 'var(--text-dim)', fontSize: '0.8rem' }}>
-                    {tx.hash.slice(0, 5)}...{tx.hash.slice(-5)}
+                    <a href={`https://stellar.expert/explorer/testnet/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--cyan)', textDecoration: 'none' }} className="chip-interactive">{tx.hash.slice(0, 5)}...{tx.hash.slice(-5)}</a>
                 </span>
                 <span style={{ textAlign: 'center', fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.8rem' }}>#{tx.ledger}</span>
                 <span style={{ textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.78rem' }}>{tx.timestamp}</span>
@@ -395,7 +397,7 @@ const DenseRow: React.FC<{
                         <span style={{ color: 'var(--text-dim)' }}>Tx:</span>
                         <span
                             onClick={() => onCopy(tx.hash, tx.id + '-hash')}
-                            style={{ fontFamily: 'monospace', color: 'var(--text-bright)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                            style={{ fontFamily: 'monospace', color: 'var(--text-bright)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2,rem' }}
                             className="chip-interactive"
                             title="Sao chép Tx Hash"
                         >
@@ -403,7 +405,7 @@ const DenseRow: React.FC<{
                             {copiedTxId === tx.id + '-hash' ? <Check size={10} style={{ color: 'var(--green)' }} /> : <Copy size={10} />}
                         </span>
                         <a
-                            href={`https://stellar.expert/explorer/public/tx/${tx.hash}`}
+                            href={`https://stellar.expert/explorer/testnet/tx/${tx.hash}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{ color: 'var(--cyan)', display: 'flex', alignItems: 'center' }}

@@ -9,7 +9,7 @@ const path = require('path');
 const { db } = require('./firebase');
 
 // Config
-const POOL_CONTRACT_ID = process.env.POOL_CONTRACT_ID || 'CAQRYQXLNBFXCKNCN3UIVGL2OCR6EL3QURZ56ZC2B4YMPYY6JAVXLBBH';
+const POOL_CONTRACT_ID = 'CDC7IHZSUWN47NVQSQ6PLW7XWIG4RLIGIIMSC47IYGQ5YYQRPPKAEXU4';
 const RPC_URL = process.env.SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org';
 const sorobanServer = new rpc.Server(RPC_URL);
 const STATE_FILE_PATH = path.join(__dirname, 'state.json');
@@ -147,7 +147,8 @@ async function pollSorobanEvents() {
                         user: decodedTopics[1],
                         asset: decodedTopics[2],
                         value: decodedValue,
-                        ledger: event.ledger
+                        ledger: event.ledger,
+                        txHash: event.txHash
                     });
                 }
 
@@ -186,11 +187,12 @@ function processEvents(events) {
     events.forEach(async (event) => {
         const type = event.type; // "supply", "borrow", "repay", "wdraw"
         const user = event.user;
-        const amount = Number(event.value);
+        const rawAmount = Number(event.value);
+        const amount = rawAmount / 10000000.0; // Scale Stroops (10^7) to native asset amount
 
         if (!type || isNaN(amount)) return;
 
-        console.log(`🔔 Decoded Soroban Event [Ledger ${event.ledger}]: ${type} by ${user} for ${amount}`);
+        console.log(`🔔 Decoded Soroban Event [Ledger ${event.ledger}]: ${type} by ${user} for ${amount} (Raw: ${rawAmount})`);
         
         // Update indexing state
         if (type === 'supply') {
@@ -225,6 +227,16 @@ function processEvents(events) {
                 : type.toUpperCase();
 
             const assetSymbol = mapAssetSymbol(event.asset);
+            const txHash = event.txHash || `GC${Math.random().toString(36).substring(2, 12).toUpperCase()}${Math.random().toString(36).substring(2, 12).toUpperCase()}`;
+
+            // Prevent duplicate transaction entries if frontend already saved it
+            if (event.txHash) {
+                const querySnapshot = await db.collection("transactions").where("hash", "==", event.txHash).get();
+                if (!querySnapshot.empty) {
+                    console.log(`ℹ️ Transaction with hash ${event.txHash} already exists in Firestore. Skipping duplicate index.`);
+                    return;
+                }
+            }
 
             await db.collection("transactions").add({
                 id: `tx-${Math.random().toString(36).substring(2, 9)}`,
@@ -234,7 +246,7 @@ function processEvents(events) {
                 unit: assetSymbol,
                 currency: "USD",
                 amount: amount,
-                hash: `GC${Math.random().toString(36).substring(2, 12).toUpperCase()}${Math.random().toString(36).substring(2, 12).toUpperCase()}`,
+                hash: txHash,
                 ledger: event.ledger,
                 account: user,
                 cpuInstructions: txType === 'SUPPLY' ? 12000000 

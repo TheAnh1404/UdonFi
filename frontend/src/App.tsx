@@ -19,7 +19,15 @@ import * as StellarSdk from '@stellar/stellar-sdk';
 import { isConnected, setAllowed, getAddress, signTransaction } from '@stellar/freighter-api';
 import { io } from 'socket.io-client';
 
-const POOL_CONTRACT_ID = 'CAQRYQXLNBFXCKNCN3UIVGL2OCR6EL3QURZ56ZC2B4YMPYY6JAVXLBBH';
+const generateMockHash = () => {
+    let hash = '';
+    while (hash.length < 64) {
+        hash += Math.random().toString(16).substring(2);
+    }
+    return hash.substring(0, 64).toLowerCase();
+};
+
+const POOL_CONTRACT_ID = 'CDC7IHZSUWN47NVQSQ6PLW7XWIG4RLIGIIMSC47IYGQ5YYQRPPKAEXU4';
 const RPC_URL = 'https://soroban-testnet.stellar.org';
 
 const INITIAL_RESERVES: Record<'XLM' | 'USDC', Reserve> = {
@@ -223,15 +231,35 @@ const ToastItem = ({ toast, onDismiss }: { toast: any; onDismiss: (id: string) =
             {toast.txHash && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>Tx Hash:</span>
-                    <code style={{
-                        fontSize: '0.65rem',
-                        background: 'rgba(255,255,255,0.05)',
-                        padding: '0.1rem 0.3rem',
-                        borderRadius: '4px',
-                        color: accentColor,
-                        textShadow: `0 0 4px ${accentColor}33`,
-                        letterSpacing: '0.02em'
-                    }}>{toast.txHash.slice(0, 12)}...{toast.txHash.slice(-8)}</code>
+                    <a
+                        href={`https://stellar.expert/explorer/testnet/tx/${toast.txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ textDecoration: 'none', cursor: 'pointer' }}
+                    >
+                        <code style={{
+                            fontSize: '0.65rem',
+                            background: 'rgba(255,255,255,0.05)',
+                            padding: '0.1rem 0.3rem',
+                            borderRadius: '4px',
+                            color: accentColor,
+                            textShadow: `0 0 4px ${accentColor}33`,
+                            letterSpacing: '0.02em',
+                            transition: 'all 0.2s ease',
+                            border: '1px solid transparent'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                            e.currentTarget.style.borderColor = accentColor;
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                            e.currentTarget.style.borderColor = 'transparent';
+                        }}
+                        >
+                            {toast.txHash.slice(0, 12)}...{toast.txHash.slice(-8)}
+                        </code>
+                    </a>
                 </div>
             )}
 
@@ -835,7 +863,8 @@ function App() {
             addLog('INFO', 'Đang tải thông tin tài khoản từ Stellar để lấy Sequence Number...');
             let sourceAccount;
             try {
-                sourceAccount = await server.getAccount(userAddress);
+                const horizonServer = new StellarSdk.Horizon.Server('https://horizon-testnet.stellar.org');
+                sourceAccount = await horizonServer.loadAccount(userAddress);
             } catch (e) {
                 addLog('ERROR', 'Tài khoản chưa được kích hoạt trên Testnet. Vui lòng nạp XLM qua Faucet (Friendbot).');
                 setTxState('FAILED');
@@ -850,35 +879,35 @@ function App() {
                 ? 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC' 
                 : 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA';
 
-            const amountWad = BigInt(Math.floor(amount * 1_000_000_000_000_000_000));
+            const amountStroop = BigInt(Math.floor(amount * 10_000_000));
 
             if (action === 'SUPPLY') {
                 functionName = 'supply';
                 contractArgs = [
-                    StellarSdk.Address.fromString(userAddress).toScVal(),
-                    StellarSdk.Address.fromString(assetAddress).toScVal(),
-                    StellarSdk.nativeToScVal(amountWad, { type: 'i128' })
+                    StellarSdk.nativeToScVal(StellarSdk.Address.fromString(userAddress)),
+                    StellarSdk.nativeToScVal(StellarSdk.Address.fromString(assetAddress)),
+                    StellarSdk.nativeToScVal(amountStroop, { type: 'i128' })
                 ];
             } else if (action === 'WITHDRAW') {
                 functionName = 'withdraw';
                 contractArgs = [
-                    StellarSdk.Address.fromString(userAddress).toScVal(),
-                    StellarSdk.Address.fromString(assetAddress).toScVal(),
-                    StellarSdk.nativeToScVal(amountWad, { type: 'i128' })
+                    StellarSdk.nativeToScVal(StellarSdk.Address.fromString(userAddress)),
+                    StellarSdk.nativeToScVal(StellarSdk.Address.fromString(assetAddress)),
+                    StellarSdk.nativeToScVal(amountStroop, { type: 'i128' })
                 ];
             } else if (action === 'BORROW') {
                 functionName = 'borrow';
                 contractArgs = [
-                    StellarSdk.Address.fromString(userAddress).toScVal(),
-                    StellarSdk.Address.fromString(assetAddress).toScVal(),
-                    StellarSdk.nativeToScVal(amountWad, { type: 'i128' })
+                    StellarSdk.nativeToScVal(StellarSdk.Address.fromString(userAddress)),
+                    StellarSdk.nativeToScVal(StellarSdk.Address.fromString(assetAddress)),
+                    StellarSdk.nativeToScVal(amountStroop, { type: 'i128' })
                 ];
             } else if (action === 'REPAY') {
                 functionName = 'repay';
                 contractArgs = [
-                    StellarSdk.Address.fromString(userAddress).toScVal(),
-                    StellarSdk.Address.fromString(assetAddress).toScVal(),
-                    StellarSdk.nativeToScVal(amountWad, { type: 'i128' })
+                    StellarSdk.nativeToScVal(StellarSdk.Address.fromString(userAddress)),
+                    StellarSdk.nativeToScVal(StellarSdk.Address.fromString(assetAddress)),
+                    StellarSdk.nativeToScVal(amountStroop, { type: 'i128' })
                 ];
             } else if (action === 'LEVERAGE') {
                 functionName = 'leverage_loop';
@@ -886,9 +915,9 @@ function App() {
                 const finalSupply = amount * L;
                 const borrowedUsdc = amount * (L - 1) * reserves.XLM.price;
                 contractArgs = [
-                    StellarSdk.Address.fromString(userAddress).toScVal(),
-                    StellarSdk.nativeToScVal(BigInt(Math.floor(finalSupply * 1_000_000_000_000_000_000)), { type: 'i128' }),
-                    StellarSdk.nativeToScVal(BigInt(Math.floor(borrowedUsdc * 1_000_000_000_000_000_000)), { type: 'i128' })
+                    StellarSdk.nativeToScVal(StellarSdk.Address.fromString(userAddress)),
+                    StellarSdk.nativeToScVal(BigInt(Math.floor(finalSupply * 10_000_000)), { type: 'i128' }),
+                    StellarSdk.nativeToScVal(BigInt(Math.floor(borrowedUsdc * 10_000_000)), { type: 'i128' })
                 ];
             }
 
@@ -974,39 +1003,127 @@ function App() {
                 setTxState('CONFIRMED');
                 setTxDetails(prev => ({ ...prev, txHash: submitResponse.hash }));
 
+                // Save real transaction to Firestore immediately (Instantly sync history UI)
+                const newRealTx = {
+                    timestamp: new Date().toLocaleTimeString(),
+                    type: action === 'LEVERAGE' ? 'SUPPLY' : action,
+                    asset: asset,
+                    amount: amount,
+                    hash: submitResponse.hash,
+                    ledger: txResult.ledger,
+                    account: userAddress,
+                    cpuInstructions: cpuInstructions
+                };
+                saveTxToFirestore(newRealTx);
+
+                // Fetch fresh XLM balance from Horizon network
+                let xlmBalance = amount;
+                try {
+                    const horizonServer = new StellarSdk.Horizon.Server('https://horizon-testnet.stellar.org');
+                    const account = await horizonServer.loadAccount(userAddress);
+                    const nativeBalance = account.balances.find((b: any) => b.asset_type === 'native');
+                    if (nativeBalance) {
+                        xlmBalance = Number(nativeBalance.balance);
+                    }
+                } catch (e) {
+                    console.error("Horizon error post-tx:", e);
+                }
+
+                // Update user balances in state and Firestore database immediately!
+                updateUserBalances((prev) => {
+                    const reserve = reserves[asset];
+                    let newWallet = { ...prev.wallet };
+                    newWallet.XLM = xlmBalance; // Sync fresh XLM balance
+                    
+                    let newSuppliedScaled = { ...prev.suppliedScaled };
+                    let newDebtScaled = { ...prev.debtScaled };
+                    let newBitmap = prev.bitmap;
+
+                    const changeScaled = amount / (action === 'SUPPLY' || action === 'WITHDRAW' ? reserve.liquidityIndex : reserve.borrowIndex);
+
+                    if (action === 'SUPPLY') {
+                        if (asset === 'USDC') newWallet.USDC -= amount;
+                        newSuppliedScaled[asset] += changeScaled;
+                        
+                        const bitToTurnOn = asset === 'XLM' ? 0n : 2n;
+                        newBitmap |= (1n << bitToTurnOn);
+                    } else if (action === 'WITHDRAW') {
+                        newSuppliedScaled[asset] -= changeScaled;
+                        if (asset === 'USDC') newWallet.USDC += amount;
+                        
+                        const actualSuppliedRemaining = newSuppliedScaled[asset] * reserve.liquidityIndex;
+                        if (actualSuppliedRemaining < 0.01) {
+                            newSuppliedScaled[asset] = 0;
+                            const bitToTurnOff = asset === 'XLM' ? 0n : 2n;
+                            newBitmap &= ~(1n << bitToTurnOff);
+                        }
+                    } else if (action === 'BORROW') {
+                        if (asset === 'USDC') newWallet.USDC += amount;
+                        newDebtScaled[asset] += changeScaled;
+                        
+                        const bitToTurnOn = asset === 'XLM' ? 1n : 3n;
+                        newBitmap |= (1n << bitToTurnOn);
+                    } else if (action === 'REPAY') {
+                        if (asset === 'USDC') newWallet.USDC -= amount;
+                        newDebtScaled[asset] -= changeScaled;
+                        
+                        const actualDebtRemaining = newDebtScaled[asset] * reserve.borrowIndex;
+                        if (actualDebtRemaining < 0.01) {
+                            newDebtScaled[asset] = 0;
+                            const bitToTurnOff = asset === 'XLM' ? 1n : 3n;
+                            newBitmap &= ~(1n << bitToTurnOff);
+                        }
+                    } else if (action === 'LEVERAGE') {
+                        const L = leverageFactor || 2.0;
+                        const initialSupply = amount;
+                        const finalSupply = initialSupply * L;
+                        const borrowedUsdc = initialSupply * (L - 1) * reserves.XLM.price;
+
+                        if (asset === 'USDC') newWallet.USDC -= initialSupply;
+                        
+                        const changeSuppliedScaled = finalSupply / reserves.XLM.liquidityIndex;
+                        newSuppliedScaled.XLM += changeSuppliedScaled;
+
+                        const changeDebtScaled = borrowedUsdc / reserves.USDC.borrowIndex;
+                        newDebtScaled.USDC += changeDebtScaled;
+
+                        newBitmap |= (1n << 0n) | (1n << 3n);
+                    }
+
+                    return {
+                        wallet: newWallet,
+                        suppliedScaled: newSuppliedScaled,
+                        debtScaled: newDebtScaled,
+                        bitmap: newBitmap,
+                        ttl: Math.min(6000, prev.ttl + 500),
+                        currentLedger: txResult.ledger || prev.currentLedger
+                    };
+                });
+
                 // Trigger UI money flow animation
                 window.dispatchEvent(new CustomEvent('defi-money-flow', {
                     detail: { type: action, asset, amount }
                 }));
-
-                await fetchUserBalancesAndContractState(userAddress);
             } else {
                 throw new Error(`Transaction failed with status: ${txResult.status}`);
             }
 
         } catch (err: any) {
-            addLog('ERROR', `⚠️ Tương tác Testnet thật gặp lỗi: ${err.message || err}`);
-            addLog('INFO', 'Đang kích hoạt cơ chế Graceful Fallback: Chạy xử lý cục bộ trên Sandbox...');
+            console.error('Real Testnet Transaction Error:', err);
+            let userFriendlyError = err.message || String(err);
             
-            // Premium Fallback animation sequence
-            setTxState('SIMULATING');
-            setTxDetails({ gasFeeXlm: 0.005, cpuInstructions: 15000000 });
+            // Suggest trustline if USDC fails and mentions trustline/missing entry
+            if (asset === 'USDC' && (userFriendlyError.toLowerCase().includes('trustline') || userFriendlyError.toLowerCase().includes('missing') || userFriendlyError.toLowerCase().includes('failed host function'))) {
+                userFriendlyError += ' (Gợi ý: Địa chỉ ví của bạn có thể chưa đăng ký Trustline USDC trên Stellar Testnet. Vui lòng mở ví Freighter và thêm Token USDC với Address: CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA)';
+            }
             
-            await new Promise(resolve => setTimeout(resolve, 800));
-            setTxState('SIGNING');
-            
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            setTxState('SUBMITTING');
-            
-            await new Promise(resolve => setTimeout(resolve, 800));
-            
-            executeFallbackTransaction(action, asset, amount, leverageFactor);
-            
-            setTxState('CONFIRMED');
-            setTxDetails(prev => ({
-                ...prev,
-                txHash: 'GC' + Math.random().toString(36).substring(2, 12).toUpperCase() + Math.random().toString(36).substring(2, 12).toUpperCase()
-            }));
+            addLog('ERROR', `⚠️ Tương tác blockchain thật thất bại: ${userFriendlyError}`);
+            setTxState('FAILED');
+            setTxDetails({ 
+                gasFeeXlm: 0, 
+                cpuInstructions: 0, 
+                error: userFriendlyError 
+            });
         }
     };
 
@@ -1101,7 +1218,7 @@ function App() {
             const renewedTtl = Math.min(6000, prev.ttl + 500);
             addLog('INFO', `Gia hạn thời gian sống dữ liệu TTL thêm 500 Ledgers (Mới: ${renewedTtl})`);
 
-            const txHash = 'GC' + Math.random().toString(36).substring(2, 12).toUpperCase() + Math.random().toString(36).substring(2, 12).toUpperCase();
+            const txHash = generateMockHash();
             const newTx = {
                 timestamp: new Date().toLocaleTimeString(),
                 type: action === 'LEVERAGE' ? 'SUPPLY' : action,
@@ -1306,7 +1423,7 @@ function App() {
             type: 'LIQUIDATION_PREPARE' as const,
             asset: 'XLM' as const,
             amount: activeSupply,
-            hash: 'GC' + Math.random().toString(36).substring(2, 12).toUpperCase() + Math.random().toString(36).substring(2, 12).toUpperCase(),
+            hash: generateMockHash(),
             ledger: userBalances.currentLedger,
             account: isBot ? 'GBKEEPERBOT7YV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDO' : (wallet.address || 'GBUDONFIYV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDONFI'),
             cpuInstructions: 60000000
@@ -1402,7 +1519,7 @@ function App() {
             type: 'LIQUIDATION_EXECUTE' as const,
             asset: 'XLM' as const,
             amount: actualSeized,
-            hash: 'GC' + Math.random().toString(36).substring(2, 12).toUpperCase() + Math.random().toString(36).substring(2, 12).toUpperCase(),
+            hash: generateMockHash(),
             ledger: userBalances.currentLedger,
             account: isBot ? 'GBKEEPERBOT7YV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDO' : (wallet.address || 'GBUDONFIYV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDONFI'),
             cpuInstructions: 30000000

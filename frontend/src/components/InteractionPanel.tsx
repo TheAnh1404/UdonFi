@@ -349,7 +349,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
                                             className="tx-hash-link"
                                         >
                                             {txDetails.txHash.slice(0, 8)}...{txDetails.txHash.slice(-8)}
-                                            <Play size={10} style={{ transform: 'rotate(-45deg)' }} />
+                                            <Play size={10} style={{ transform: 'rotate(-45deg)', marginLeft: '0.2rem' }} />
                                         </a>
                                     </span>
                                 </div>

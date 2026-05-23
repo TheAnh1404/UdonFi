@@ -48,3 +48,6 @@ lerna-debug.log*
 # Project specific
 stellar-dev-skill/site/public/skills/
 stellar-dev-skill/site/public/llms.txt
+
+# Secrets & Credentials
+indexer_bot/serviceAccountKey.json

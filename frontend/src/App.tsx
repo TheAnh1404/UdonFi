@@ -4,12 +4,15 @@ import { HealthFactorGauge } from './components/HealthFactorGauge';
 import { PositionStats } from './components/PositionStats';
 import { SystemReserves } from './components/SystemReserves';
 import { Footer } from './components/Footer';
-import { ConsoleLogger } from './components/ConsoleLogger';
 import { TradingViewChart } from './components/TradingViewChart';
 import { PoolsPage } from './components/PoolsPage.tsx';
 import { CreditMarketPage } from './components/CreditMarketPage.tsx';
+import { MoneyFlowOverlay } from './components/MoneyFlowOverlay';
+import { SimulatorPage } from './components/SimulatorPage';
 import type { Reserve, UserBalances, LogLine, LiqSandbox, Web3Tx } from './types/lending';
 import { Coins, Database } from 'lucide-react';
+
+const eventChannel = typeof window !== 'undefined' ? new BroadcastChannel('udonfi_notification_bridge') : null;
 
 // Web3 Integration Imports
 import * as StellarSdk from '@stellar/stellar-sdk';
@@ -134,14 +137,209 @@ const INITIAL_TX_HISTORY: Web3Tx[] = [
     }
 ];
 
+const ToastItem = ({ toast, onDismiss }: { toast: any; onDismiss: (id: string) => void }) => {
+    const [visible, setVisible] = useState(false);
+
+    useEffect(() => {
+        const enterTimer = setTimeout(() => setVisible(true), 50);
+
+        const dismissTimer = setTimeout(() => {
+            setVisible(false);
+            setTimeout(() => onDismiss(toast.id), 400);
+        }, 5500);
+
+        return () => {
+            clearTimeout(enterTimer);
+            clearTimeout(dismissTimer);
+        };
+    }, [toast.id, onDismiss]);
+
+    const isLiquidation = toast.action?.includes('LIQUIDATION');
+    const accentColor = isLiquidation ? '#ff0055' : 'var(--cyan)';
+    const bgGradient = isLiquidation 
+        ? 'linear-gradient(135deg, rgba(20, 10, 25, 0.95), rgba(40, 5, 20, 0.9))'
+        : 'linear-gradient(135deg, rgba(10, 20, 25, 0.95), rgba(5, 30, 35, 0.9))';
+    const shadowGlow = isLiquidation
+        ? '0 8px 32px rgba(255, 0, 85, 0.25), inset 0 0 12px rgba(255, 0, 85, 0.1)'
+        : '0 8px 32px rgba(0, 242, 254, 0.25), inset 0 0 12px rgba(0, 242, 254, 0.1)';
+
+    return (
+        <div style={{
+            background: bgGradient,
+            border: `1px solid ${accentColor}44`,
+            boxShadow: shadowGlow,
+            borderRadius: '12px',
+            padding: '1rem',
+            backdropFilter: 'blur(16px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.4rem',
+            transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+            transform: visible ? 'translateX(0) scale(1)' : 'translateX(120%) scale(0.9)',
+            opacity: visible ? 1 : 0,
+            pointerEvents: 'auto',
+            position: 'relative',
+            overflow: 'hidden'
+        }}>
+            <div style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: '4px',
+                background: accentColor,
+                boxShadow: `0 0 10px ${accentColor}`
+            }}></div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-bright)', letterSpacing: '0.03em' }}>
+                    {toast.title}
+                </span>
+                <button 
+                    onClick={() => {
+                        setVisible(false);
+                        setTimeout(() => onDismiss(toast.id), 400);
+                    }}
+                    style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                        padding: '0.1rem 0.3rem',
+                        transition: 'color 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                >
+                    ×
+                </button>
+            </div>
+
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: '1.4', margin: 0 }}>
+                {toast.message}
+            </p>
+
+            {toast.txHash && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>Tx Hash:</span>
+                    <code style={{
+                        fontSize: '0.65rem',
+                        background: 'rgba(255,255,255,0.05)',
+                        padding: '0.1rem 0.3rem',
+                        borderRadius: '4px',
+                        color: accentColor,
+                        textShadow: `0 0 4px ${accentColor}33`,
+                        letterSpacing: '0.02em'
+                    }}>{toast.txHash.slice(0, 12)}...{toast.txHash.slice(-8)}</code>
+                </div>
+            )}
+
+            <div style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: '2px',
+                background: accentColor,
+                opacity: 0.7,
+                transformOrigin: 'left',
+                animation: 'toast-progress 5.5s linear forwards'
+            }}></div>
+        </div>
+    );
+};
+
 function App() {
     const [reserves, setReserves] = useState<Record<'XLM' | 'USDC', Reserve>>(INITIAL_RESERVES);
     const [userBalances, setUserBalances] = useState<UserBalances>(INITIAL_USER_BALANCES);
     const [wallet, setWallet] = useState({ isConnected: false, address: '' });
     const [logs, setLogs] = useState<LogLine[]>([]);
-    const [currentView, setCurrentView] = useState<'DASHBOARD' | 'MARKET' | 'POOLS'>('DASHBOARD');
+    const [currentView, setCurrentView] = useState<'DASHBOARD' | 'MARKET' | 'POOLS' | 'SIMULATOR'>('DASHBOARD');
+    const [toasts, setToasts] = useState<any[]>([]);
+    const [notifications, setNotifications] = useState<any[]>([]);
     const [txHistory, setTxHistory] = useState<Web3Tx[]>(INITIAL_TX_HISTORY);
+
+    // Unified notification dispatcher (Toasts, Sound Chime and Notification History Dropdown)
+    const triggerNotification = (data: {
+        type: 'SUCCESS' | 'INFO' | 'WARNING' | 'ERROR';
+        title: string;
+        message: string;
+        txHash?: string;
+        action?: string;
+    }) => {
+        const id = Math.random().toString(36).substring(2, 9);
+        const timestamp = new Date().toLocaleTimeString();
+
+        // Push to toasts popup
+        setToasts((prev) => [...prev, { ...data, id, timestamp }]);
+
+        // Push to notifications dropdown history (limited to 30 items)
+        setNotifications((prev) => [{ ...data, id, timestamp }, ...prev].slice(0, 30));
+
+        // Synth Web3 premium chime sound using AudioContext
+        try {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.type = 'sine';
+            const isLiq = data.action?.includes('LIQUIDATION');
+            oscillator.frequency.setValueAtTime(isLiq ? 360 : 780, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.04, audioCtx.currentTime);
+            
+            oscillator.start();
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+            oscillator.stop(audioCtx.currentTime + 0.5);
+        } catch (soundError) {
+            console.warn('Synthetic chime sound blocked:', soundError);
+        }
+    };
+
+    const handleNavigate = (view: 'DASHBOARD' | 'MARKET' | 'POOLS' | 'SIMULATOR') => {
+        setCurrentView(view);
+        if (view === 'DASHBOARD') window.location.hash = 'dashboard';
+        else if (view === 'MARKET') window.location.hash = 'market';
+        else if (view === 'POOLS') window.location.hash = 'pools';
+        else if (view === 'SIMULATOR') window.location.hash = 'simulator';
+    };
+
+    // Hash routing handler
+    useEffect(() => {
+        const handleHashChange = () => {
+            const hash = window.location.hash;
+            if (hash === '#simulator') {
+                setCurrentView('SIMULATOR');
+            } else if (hash === '#market') {
+                setCurrentView('MARKET');
+            } else if (hash === '#pools') {
+                setCurrentView('POOLS');
+            } else if (hash === '#dashboard' || !hash) {
+                setCurrentView('DASHBOARD');
+            }
+        };
+
+        handleHashChange();
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
+
+    // BroadcastChannel Notification Receiver
+    useEffect(() => {
+        if (!eventChannel) return;
+
+        const handleMessage = (event: MessageEvent) => {
+            triggerNotification(event.data);
+        };
+
+        eventChannel.addEventListener('message', handleMessage);
+        return () => eventChannel.removeEventListener('message', handleMessage);
+    }, []);
     const socketInitializedRef = useRef(false);
+    const socketRef = useRef<any>(null);
 
     // Soroban Transaction States
     const [txState, setTxState] = useState<'IDLE' | 'SIMULATING' | 'SIGNING' | 'SUBMITTING' | 'CONFIRMED' | 'FAILED'>('IDLE');
@@ -154,8 +352,8 @@ function App() {
 
     // Liquidation sandbox state
     const [sandbox, setSandbox] = useState<LiqSandbox>({
-        supplyXLM: 2000,
-        borrowUSDC: 200,
+        supplyXLM: 0,
+        borrowUSDC: 0,
         xlmPrice: 0.15,
         stepActive: 0,
         sessionId: null,
@@ -168,6 +366,51 @@ function App() {
         const timestamp = new Date().toLocaleTimeString();
         const id = Math.random().toString(36).substring(2, 9);
         setLogs((prev) => [...prev, { id, timestamp, type, message }].slice(-50));
+    };
+
+    // Save Sandbox/Graceful Fallback Web3 Transaction to Firestore via Socket Proxy
+    const saveTxToFirestore = async (tx: Omit<Web3Tx, 'id'>) => {
+        try {
+            const txData = {
+                ...tx,
+                id: 'tx-' + Math.random().toString(36).substring(2, 9),
+                unit: tx.asset,
+                currency: "USD"
+            };
+            if (socketRef.current && socketRef.current.connected) {
+                socketRef.current.emit("save_tx", txData);
+                addLog('SYSTEM', `Đang đồng bộ giao dịch ${tx.type} lên Firestore qua socket proxy...`);
+            } else {
+                throw new Error("Kênh truyền Socket.io chưa kết nối!");
+            }
+        } catch (error: any) {
+            console.error('Lỗi lưu transaction lên Firestore:', error);
+            addLog('ERROR', `Lỗi lưu transaction lên Firestore: ${error.message || error}`);
+        }
+    };
+
+    // Update real-time Pool state inside Firestore pool_state/current document via Socket Proxy
+    const updatePoolStateInFirestore = async (suppliedDelta: number, borrowedDelta: number) => {
+        try {
+            const currentSupplied = reserves.XLM.totalSupplied;
+            const currentBorrowed = reserves.USDC.totalBorrowed;
+            
+            const newSupplied = Math.max(0, currentSupplied + suppliedDelta);
+            const newBorrowed = Math.max(0, currentBorrowed + borrowedDelta);
+
+            if (socketRef.current && socketRef.current.connected) {
+                socketRef.current.emit("update_pool_state", {
+                    globalTotalSupplied: newSupplied,
+                    globalTotalBorrowed: newBorrowed
+                });
+                addLog('SYSTEM', `Đồng bộ hóa Pool State qua socket: Supplied XLM = ${newSupplied.toLocaleString(undefined, {maximumFractionDigits: 1})}, Borrowed USDC = ${newBorrowed.toLocaleString(undefined, {maximumFractionDigits: 1})}`);
+            } else {
+                throw new Error("Kênh truyền Socket.io chưa kết nối!");
+            }
+        } catch (error: any) {
+            console.error('Lỗi cập nhật Pool State lên Firestore:', error);
+            addLog('ERROR', `Lỗi cập nhật Pool State lên Firestore: ${error.message || error}`);
+        }
     };
 
     // Real Freighter connect and RPC query integration
@@ -200,6 +443,38 @@ function App() {
         } catch (err: any) {
             addLog('ERROR', `Lỗi kết nối ví Freighter: ${err.message || err}`);
         }
+    };
+
+    const saveUserBalancesToFirestore = async (userAddress: string, balances: UserBalances) => {
+        if (!userAddress) return;
+        try {
+            const formattedBalances = {
+                wallet: balances.wallet,
+                suppliedScaled: balances.suppliedScaled,
+                debtScaled: balances.debtScaled,
+                bitmap: balances.bitmap.toString(),
+                ttl: Number(balances.ttl) || 6000,
+                currentLedger: Number(balances.currentLedger) || 641829
+            };
+            if (socketRef.current && socketRef.current.connected) {
+                socketRef.current.emit("save_user_balance", { userAddress, balances: formattedBalances });
+            } else {
+                throw new Error("Kênh truyền Socket.io chưa kết nối!");
+            }
+        } catch (error: any) {
+            console.error('Lỗi lưu vị thế ví lên Firestore:', error);
+            addLog('ERROR', `Lỗi lưu vị thế ví lên Firestore: ${error.message || error}`);
+        }
+    };
+
+    const updateUserBalances = (updater: UserBalances | ((prev: UserBalances) => UserBalances)) => {
+        setUserBalances((prev) => {
+            const next = typeof updater === 'function' ? updater(prev) : updater;
+            if (wallet.isConnected && wallet.address) {
+                saveUserBalancesToFirestore(wallet.address, next);
+            }
+            return next;
+        });
     };
 
     const fetchUserBalancesAndContractState = async (userAddress: string) => {
@@ -242,16 +517,77 @@ function App() {
                 }
             }
 
-            setUserBalances(prev => ({
-                ...prev,
-                wallet: {
-                    ...prev.wallet,
-                    XLM: xlmBalance,
-                    USDC: prev.wallet.USDC // keep USDC mock balance
+            // 2. Fetch User position from Firestore via Socket Proxy Callback
+            addLog('INFO', 'Đang truy vấn vị thế người dùng (Supplied, Borrowed, Bitmap, TTL) qua Socket Proxy...');
+            let balancesToUse = INITIAL_USER_BALANCES;
+            
+            if (socketRef.current && socketRef.current.connected) {
+                try {
+                    const response: any = await new Promise((resolve, reject) => {
+                        socketRef.current.emit("get_user_balances", { userAddress }, (res: any) => {
+                            if (res && res.success) {
+                                resolve(res.data);
+                            } else {
+                                reject(new Error(res ? res.error : "Không nhận được phản hồi từ Socket Server"));
+                            }
+                        });
+                    });
+                    
+                    if (response) {
+                        balancesToUse = {
+                            wallet: {
+                                XLM: xlmBalance,
+                                USDC: response.wallet?.USDC !== undefined ? Number(response.wallet.USDC) : INITIAL_USER_BALANCES.wallet.USDC
+                            },
+                            suppliedScaled: {
+                                XLM: response.suppliedScaled?.XLM !== undefined ? Number(response.suppliedScaled.XLM) : 0,
+                                USDC: response.suppliedScaled?.USDC !== undefined ? Number(response.suppliedScaled.USDC) : 0
+                            },
+                            debtScaled: {
+                                XLM: response.debtScaled?.XLM !== undefined ? Number(response.debtScaled.XLM) : 0,
+                                USDC: response.debtScaled?.USDC !== undefined ? Number(response.debtScaled.USDC) : 0
+                            },
+                            bitmap: response.bitmap ? BigInt(response.bitmap) : 0n,
+                            ttl: response.ttl !== undefined ? Number(response.ttl) : 5850,
+                            currentLedger: response.currentLedger !== undefined ? Number(response.currentLedger) : 641829
+                        };
+                        addLog('SUCCESS', 'Tải thành công vị thế người dùng từ Firestore qua Socket Proxy!');
+                    } else {
+                        addLog('INFO', 'Ví mới chưa có vị thế trên Firestore. Đang khởi tạo vị thế mặc định...');
+                        balancesToUse = {
+                            ...INITIAL_USER_BALANCES,
+                            wallet: {
+                                XLM: xlmBalance,
+                                USDC: INITIAL_USER_BALANCES.wallet.USDC
+                            }
+                        };
+                        await saveUserBalancesToFirestore(userAddress, balancesToUse);
+                    }
+                } catch (socketErr: any) {
+                    console.error("Lỗi socket get_user_balances:", socketErr);
+                    addLog('ERROR', `Lỗi socket proxy khi lấy vị thế: ${socketErr.message || socketErr}`);
+                    // Fallback to local
+                    balancesToUse = {
+                        ...INITIAL_USER_BALANCES,
+                        wallet: {
+                            XLM: xlmBalance,
+                            USDC: INITIAL_USER_BALANCES.wallet.USDC
+                        }
+                    };
                 }
-            }));
+            } else {
+                addLog('INFO', 'Kênh truyền Socket.io chưa sẵn sàng. Sử dụng vị thế mặc định.');
+                balancesToUse = {
+                    ...INITIAL_USER_BALANCES,
+                    wallet: {
+                        XLM: xlmBalance,
+                        USDC: INITIAL_USER_BALANCES.wallet.USDC
+                    }
+                };
+            }
+            setUserBalances(balancesToUse);
         } catch (err: any) {
-            addLog('ERROR', `Lỗi tải dữ liệu Soroban: ${err.message || err}`);
+            addLog('ERROR', `Lỗi tải dữ liệu Soroban/Firestore: ${err.message || err}`);
         }
     };
 
@@ -340,7 +676,7 @@ function App() {
                 tickCount++;
                 if (tickCount >= 5) {
                     tickCount = 0;
-                    setUserBalances((prev) => {
+                    updateUserBalances((prev) => {
                         if (prev.ttl <= 1) {
                             addLog('ERROR', '⚠️ SỰ CỐ: Ledger TTL chạm 0! Dữ liệu tài khoản bị EVICITED khỏi Soroban Ledger.');
                             addLog('INFO', 'Vui lòng nhấn "Gia hạn TTL" hoặc nạp tài sản để khôi phục.');
@@ -365,13 +701,43 @@ function App() {
         return () => clearInterval(interval);
     }, [wallet.isConnected]);
 
-    // Socket.io integration to sync real-time events from indexer bot
+    // Tự động đồng bộ số dư nạp/vay thật của người dùng vào Sandbox khi ví Freighter đã kết nối
+    useEffect(() => {
+        if (wallet.isConnected) {
+            const realSupplyXLM = userBalances.suppliedScaled.XLM * reserves.XLM.liquidityIndex;
+            const realBorrowUSDC = userBalances.debtScaled.USDC * reserves.USDC.borrowIndex;
+            setSandbox((prev) => ({
+                ...prev,
+                supplyXLM: realSupplyXLM,
+                borrowUSDC: realBorrowUSDC
+            }));
+        } else {
+            setSandbox((prev) => ({
+                ...prev,
+                supplyXLM: 0,
+                borrowUSDC: 0
+            }));
+        }
+    }, [
+        wallet.isConnected, 
+        userBalances.suppliedScaled.XLM, 
+        userBalances.debtScaled.USDC, 
+        reserves.XLM.liquidityIndex, 
+        reserves.USDC.borrowIndex
+    ]);
+
+    // Socket.io integration to sync real-time events from indexer bot (Forwarded from Firestore via Admin SDK)
     useEffect(() => {
         if (!socketInitializedRef.current) {
             addLog('SYSTEM', 'Đang kết nối tới Real-time Indexer Bot qua WebSockets...');
             socketInitializedRef.current = true;
         }
         const socket = io('http://localhost:3001');
+        socketRef.current = socket;
+
+        let lastSuppliedXlm = 0;
+        let lastBorrowedUsdc = 0;
+        let isFirstPoolSync = true;
 
         socket.on('connect', () => {
             addLog('SUCCESS', 'Đã kết nối thành công tới Indexer Bot WebSocket tại http://localhost:3001!');
@@ -381,23 +747,62 @@ function App() {
             // fail silently, do not spam log since it's just polling in the background
         });
 
-        socket.on('protocol_update', (data: any) => {
-            if (data && (data.globalTotalSupplied > 0 || data.globalTotalBorrowed > 0)) {
-                addLog('INFO', 'Đồng bộ hóa thành công dữ liệu bể thanh khoản thời gian thực từ Indexer!');
+        // 1. Listen to Real-time Pool State updates from Socket Server
+        socket.on('pool_state_update', (data: any) => {
+            if (data) {
+                const suppliedXlm = data.globalTotalSupplied > 0 ? Number(data.globalTotalSupplied) : 0;
+                const borrowedUsdc = data.globalTotalBorrowed > 0 ? Number(data.globalTotalBorrowed) : 0;
+
+                // Only check for changes larger than a minimal threshold to avoid noise
+                const hasChanged = Math.abs(suppliedXlm - lastSuppliedXlm) > 0.1 || Math.abs(borrowedUsdc - lastBorrowedUsdc) > 0.1;
+
+                if (isFirstPoolSync) {
+                    addLog('SUCCESS', 'Đồng bộ hóa thành công bể thanh khoản thời gian thực qua Socket Proxy!');
+                    isFirstPoolSync = false;
+                    lastSuppliedXlm = suppliedXlm;
+                    lastBorrowedUsdc = borrowedUsdc;
+                } else if (hasChanged) {
+                    addLog('INFO', `Bể thanh khoản cập nhật: Supplied XLM = ${suppliedXlm.toLocaleString(undefined, {maximumFractionDigits: 1})}, Borrowed USDC = ${borrowedUsdc.toLocaleString(undefined, {maximumFractionDigits: 1})}`);
+                    lastSuppliedXlm = suppliedXlm;
+                    lastBorrowedUsdc = borrowedUsdc;
+                }
+
                 setReserves((prev) => {
                     const xlm = prev.XLM;
                     const usdc = prev.USDC;
+                    
+                    const nextSuppliedXlm = data.globalTotalSupplied > 0 ? Number(data.globalTotalSupplied) : xlm.totalSupplied;
+                    const nextBorrowedUsdc = data.globalTotalBorrowed > 0 ? Number(data.globalTotalBorrowed) : usdc.totalBorrowed;
+                    
+                    // Recalculate dynamic APYs using Kinked APY Curve logic for the updated values
+                    const updatedXlm = getUpdatedReserveRates(xlm, nextSuppliedXlm, xlm.totalBorrowed);
+                    const updatedUsdc = getUpdatedReserveRates(usdc, usdc.totalSupplied, nextBorrowedUsdc);
+                    
                     return {
-                        XLM: {
-                            ...xlm,
-                            totalSupplied: data.globalTotalSupplied > 0 ? data.globalTotalSupplied : xlm.totalSupplied
-                        },
-                        USDC: {
-                            ...usdc,
-                            totalBorrowed: data.globalTotalBorrowed > 0 ? data.globalTotalBorrowed : usdc.totalBorrowed
-                        }
+                        XLM: updatedXlm,
+                        USDC: updatedUsdc
                     };
                 });
+            }
+        });
+
+        // 2. Listen to Real-time Transactions updates from Socket Server
+        socket.on('transactions_update', (txs: Web3Tx[]) => {
+            if (txs && txs.length > 0) {
+                setTxHistory(txs);
+            }
+        });
+
+        // 3. Listen to New Transaction events to trigger Money Flow animation overlay
+        socket.on('new_transaction_added', (data: any) => {
+            if (data) {
+                window.dispatchEvent(new CustomEvent('defi-money-flow', {
+                    detail: {
+                        type: data.type,
+                        asset: data.asset,
+                        amount: Number(data.amount) || 0
+                    }
+                }));
             }
         });
 
@@ -569,6 +974,11 @@ function App() {
                 setTxState('CONFIRMED');
                 setTxDetails(prev => ({ ...prev, txHash: submitResponse.hash }));
 
+                // Trigger UI money flow animation
+                window.dispatchEvent(new CustomEvent('defi-money-flow', {
+                    detail: { type: action, asset, amount }
+                }));
+
                 await fetchUserBalancesAndContractState(userAddress);
             } else {
                 throw new Error(`Transaction failed with status: ${txResult.status}`);
@@ -606,7 +1016,7 @@ function App() {
         amount: number,
         leverageFactor?: number
     ) => {
-        setUserBalances((prev) => {
+        updateUserBalances((prev) => {
             const reserve = reserves[asset];
             let newWallet = { ...prev.wallet };
             let newSuppliedScaled = { ...prev.suppliedScaled };
@@ -616,6 +1026,8 @@ function App() {
             const changeScaled = amount / (action === 'SUPPLY' || action === 'WITHDRAW' ? reserve.liquidityIndex : reserve.borrowIndex);
 
             let logMessage = '';
+            let suppliedDelta = 0;
+            let borrowedDelta = 0;
 
             if (action === 'SUPPLY') {
                 newWallet[asset] -= amount;
@@ -625,10 +1037,7 @@ function App() {
                 const bitToTurnOn = asset === 'XLM' ? 0n : 2n;
                 newBitmap |= (1n << bitToTurnOn);
 
-                setReserves((prevRes) => ({
-                    ...prevRes,
-                    [asset]: getUpdatedReserveRates(prevRes[asset], prevRes[asset].totalSupplied + amount, prevRes[asset].totalBorrowed)
-                }));
+                if (asset === 'XLM') suppliedDelta = amount;
             } else if (action === 'WITHDRAW') {
                 newSuppliedScaled[asset] -= changeScaled;
                 newWallet[asset] += amount;
@@ -641,10 +1050,7 @@ function App() {
                     newBitmap &= ~(1n << bitToTurnOff);
                 }
 
-                setReserves((prevRes) => ({
-                    ...prevRes,
-                    [asset]: getUpdatedReserveRates(prevRes[asset], Math.max(0, prevRes[asset].totalSupplied - amount), prevRes[asset].totalBorrowed)
-                }));
+                if (asset === 'XLM') suppliedDelta = -amount;
             } else if (action === 'BORROW') {
                 newWallet[asset] += amount;
                 newDebtScaled[asset] += changeScaled;
@@ -653,10 +1059,7 @@ function App() {
                 const bitToTurnOn = asset === 'XLM' ? 1n : 3n;
                 newBitmap |= (1n << bitToTurnOn);
 
-                setReserves((prevRes) => ({
-                    ...prevRes,
-                    [asset]: getUpdatedReserveRates(prevRes[asset], prevRes[asset].totalSupplied, prevRes[asset].totalBorrowed + amount)
-                }));
+                if (asset === 'USDC') borrowedDelta = amount;
             } else if (action === 'REPAY') {
                 newWallet[asset] -= amount;
                 newDebtScaled[asset] -= changeScaled;
@@ -669,10 +1072,7 @@ function App() {
                     newBitmap &= ~(1n << bitToTurnOff);
                 }
 
-                setReserves((prevRes) => ({
-                    ...prevRes,
-                    [asset]: getUpdatedReserveRates(prevRes[asset], prevRes[asset].totalSupplied, Math.max(0, prevRes[asset].totalBorrowed - amount))
-                }));
+                if (asset === 'USDC') borrowedDelta = -amount;
             } else if (action === 'LEVERAGE') {
                 const L = leverageFactor || 2.0;
                 const initialSupply = amount;
@@ -691,14 +1091,8 @@ function App() {
 
                 newBitmap |= (1n << 0n) | (1n << 3n);
 
-                setReserves((prevRes) => {
-                    const updatedXlm = getUpdatedReserveRates(prevRes.XLM, prevRes.XLM.totalSupplied + finalSupply, prevRes.XLM.totalBorrowed);
-                    const updatedUsdc = getUpdatedReserveRates(prevRes.USDC, prevRes.USDC.totalSupplied, prevRes.USDC.totalBorrowed + borrowedUsdc);
-                    return {
-                        XLM: updatedXlm,
-                        USDC: updatedUsdc
-                    };
-                });
+                suppliedDelta = finalSupply;
+                borrowedDelta = borrowedUsdc;
             }
 
             addLog('SUCCESS', logMessage);
@@ -708,8 +1102,7 @@ function App() {
             addLog('INFO', `Gia hạn thời gian sống dữ liệu TTL thêm 500 Ledgers (Mới: ${renewedTtl})`);
 
             const txHash = 'GC' + Math.random().toString(36).substring(2, 12).toUpperCase() + Math.random().toString(36).substring(2, 12).toUpperCase();
-            const newTx: Web3Tx = {
-                id: 'tx-' + Math.random().toString(36).substring(2, 9),
+            const newTx = {
                 timestamp: new Date().toLocaleTimeString(),
                 type: action === 'LEVERAGE' ? 'SUPPLY' : action,
                 asset: asset,
@@ -723,7 +1116,37 @@ function App() {
                     : action === 'REPAY' ? 14000000 
                     : 35000000
             };
-            setTxHistory((prevTx) => [newTx, ...prevTx]);
+            
+            // Save transaction to Firestore (Real-time synced)
+            saveTxToFirestore(newTx);
+            
+            const messageData = {
+                type: 'SUCCESS' as const,
+                title: action === 'SUPPLY' ? `🎉 NẠP THẾ CHẤP THÀNH CÔNG` 
+                    : action === 'WITHDRAW' ? `💸 RÚT TIỀN THÀNH CÔNG` 
+                    : action === 'BORROW' ? `💰 VAY TIỀN THÀNH CÔNG` 
+                    : action === 'REPAY' ? `💸 TRẢ NỢ THÀNH CÔNG` 
+                    : `⚡ KÍCH HOẠT ĐÒN BẨY THÀNH CÔNG`,
+                message: logMessage,
+                txHash: txHash,
+                action: action
+            };
+            
+            // Broadcast successful transaction to all tabs
+            eventChannel?.postMessage(messageData);
+            
+            // Trigger local Toast and add to notification history
+            triggerNotification(messageData);
+            
+            // Trigger instant UI money flow animation
+            window.dispatchEvent(new CustomEvent('defi-money-flow', {
+                detail: { type: action, asset, amount }
+            }));
+            
+            // Sync current reserve changes directly to Firestore
+            if (suppliedDelta !== 0 || borrowedDelta !== 0) {
+                updatePoolStateInFirestore(suppliedDelta, borrowedDelta);
+            }
 
             return {
                 ...prev,
@@ -740,7 +1163,7 @@ function App() {
     const handleToggleBit = (bitIndex: number) => {
         if (!wallet.isConnected) return;
         
-        setUserBalances((prev) => {
+        updateUserBalances((prev) => {
             const isBitOn = ((prev.bitmap >> BigInt(bitIndex)) & 1n) === 1n;
             const newBitmap = isBitOn ? prev.bitmap & ~(1n << BigInt(bitIndex)) : prev.bitmap | (1n << BigInt(bitIndex));
             
@@ -761,7 +1184,7 @@ function App() {
             return;
         }
 
-        setUserBalances((prev) => {
+        updateUserBalances((prev) => {
             const restoredTtl = 6000;
             addLog('SUCCESS', `Gọi hàm extend_ttl() thành công! Gia hạn bộ nhớ lưu trữ về tối đa: ${restoredTtl} Ledgers.`);
             return {
@@ -778,7 +1201,7 @@ function App() {
             return;
         }
 
-        setUserBalances((prev) => {
+        updateUserBalances((prev) => {
             // If turning off collateral, verify simulated health factor remains safe
             if (!useAsCollateral) {
                 const xlmSupplied = prev.suppliedScaled.XLM * reserves.XLM.liquidityIndex;
@@ -878,18 +1301,36 @@ function App() {
         addLog('INFO', `${isBot ? '🤖 Bot Keeper: ' : ''}Soroban Session được đăng ký tại ledger với ID: ${mockSessionId}. Đã khóa ${activeSupply.toLocaleString(undefined, {maximumFractionDigits: 1})} XLM thế chấp. Tiêu thụ 60,000,000 CPU instructions.`);
 
         // Push to Web3 Transaction History
-        const prepareTx: Web3Tx = {
-            id: 'tx-' + Math.random().toString(36).substring(2, 9),
+        const prepareTx = {
             timestamp: new Date().toLocaleTimeString(),
-            type: 'LIQUIDATION_PREPARE',
-            asset: 'XLM',
+            type: 'LIQUIDATION_PREPARE' as const,
+            asset: 'XLM' as const,
             amount: activeSupply,
             hash: 'GC' + Math.random().toString(36).substring(2, 12).toUpperCase() + Math.random().toString(36).substring(2, 12).toUpperCase(),
             ledger: userBalances.currentLedger,
             account: isBot ? 'GBKEEPERBOT7YV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDO' : (wallet.address || 'GBUDONFIYV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDONFI'),
             cpuInstructions: 60000000
         };
-        setTxHistory((prev) => [prepareTx, ...prev]);
+        saveTxToFirestore(prepareTx);
+
+        const prepareMessageData = {
+            type: 'SUCCESS' as const,
+            title: isBot ? '🤖 KEEPER: KHÓA PHIÊN THANH LÝ' : '⚡ KHÓA PHIÊN THANH LÝ (PREPARE)',
+            message: `${isBot ? 'Bot Keeper' : 'Bạn'} đã kích hoạt thành công prepare_liquidation(). Đăng ký phiên ID: ${mockSessionId}. Khóa ${activeSupply.toLocaleString(undefined, {maximumFractionDigits: 1})} XLM thế chấp.`,
+            txHash: prepareTx.hash,
+            action: 'LIQUIDATION_PREPARE'
+        };
+
+        // Broadcast Prepare Liquidation success
+        eventChannel?.postMessage(prepareMessageData);
+
+        // Trigger local Toast and add to notification history
+        triggerNotification(prepareMessageData);
+
+        // Trigger UI money flow animation
+        window.dispatchEvent(new CustomEvent('defi-money-flow', {
+            detail: { type: 'LIQUIDATION_PREPARE', asset: 'XLM', amount: activeSupply }
+        }));
     };
 
     const handleExecuteLiquidation = () => {
@@ -903,7 +1344,7 @@ function App() {
         const isBot = sandbox.isAutoKeeperActive;
 
         if (isRealP2PActive) {
-            setUserBalances((prev) => {
+            updateUserBalances((prev) => {
                 const newDebtScaled = { ...prev.debtScaled, USDC: 0 };
                 const seizedScaled = actualSeized / reserves.XLM.liquidityIndex;
                 const newSuppliedScaled = {
@@ -929,16 +1370,6 @@ function App() {
                     bitmap: newBitmap
                 };
             });
-
-            // Update pool reserves
-            setReserves((prevRes) => {
-                const updatedUsdc = getUpdatedReserveRates(prevRes.USDC, prevRes.USDC.totalSupplied, Math.max(0, prevRes.USDC.totalBorrowed - debtPaid));
-                const updatedXlm = getUpdatedReserveRates(prevRes.XLM, Math.max(0, prevRes.XLM.totalSupplied - actualSeized), prevRes.XLM.totalBorrowed);
-                return {
-                    XLM: updatedXlm,
-                    USDC: updatedUsdc
-                };
-            });
         } else {
             // Update local sandbox state
             setSandbox((prev) => ({
@@ -946,17 +1377,10 @@ function App() {
                 supplyXLM: Math.max(0, prev.supplyXLM - actualSeized),
                 borrowUSDC: 0
             }));
-
-            // Sync with system pool reserves in simulation mode
-            setReserves((prevRes) => {
-                const updatedUsdc = getUpdatedReserveRates(prevRes.USDC, prevRes.USDC.totalSupplied, Math.max(0, prevRes.USDC.totalBorrowed - debtPaid));
-                const updatedXlm = getUpdatedReserveRates(prevRes.XLM, Math.max(0, prevRes.XLM.totalSupplied - actualSeized), prevRes.XLM.totalBorrowed);
-                return {
-                    XLM: updatedXlm,
-                    USDC: updatedUsdc
-                };
-            });
         }
+
+        // Sync pool reserves dynamically with Firestore pool state
+        updatePoolStateInFirestore(-actualSeized, -debtPaid);
 
         // Set step active to 2
         setSandbox((prev) => ({
@@ -973,42 +1397,62 @@ function App() {
         }
 
         // Push to Web3 Transaction History
-        const executeTx: Web3Tx = {
-            id: 'tx-' + Math.random().toString(36).substring(2, 9),
+        const executeTx = {
             timestamp: new Date().toLocaleTimeString(),
-            type: 'LIQUIDATION_EXECUTE',
-            asset: 'XLM',
+            type: 'LIQUIDATION_EXECUTE' as const,
+            asset: 'XLM' as const,
             amount: actualSeized,
             hash: 'GC' + Math.random().toString(36).substring(2, 12).toUpperCase() + Math.random().toString(36).substring(2, 12).toUpperCase(),
             ledger: userBalances.currentLedger,
             account: isBot ? 'GBKEEPERBOT7YV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDO' : (wallet.address || 'GBUDONFIYV6W42C7G5LXTQ6N5L2G57Q36OULKNGW3S5Q3K36UXUDONFI'),
             cpuInstructions: 30000000
         };
-        setTxHistory((prev) => [executeTx, ...prev]);
+        saveTxToFirestore(executeTx);
+
+        const executeMessageData = {
+            type: 'SUCCESS' as const,
+            title: isBot ? '🤖 KEEPER: THANH LÝ THÀNH CÔNG' : '🔥 THANH LÝ THÀNH CÔNG (EXECUTE)',
+            message: `Thanh lý hoàn tất! Đã thanh toán nợ: ${debtPaid.toFixed(2)} USDC. Tịch thu ${actualSeized.toFixed(1)} XLM thế chấp (Bao gồm 5% thưởng).`,
+            txHash: executeTx.hash,
+            action: 'LIQUIDATION_EXECUTE'
+        };
+
+        // Broadcast Execute Liquidation success
+        eventChannel?.postMessage(executeMessageData);
+
+        // Trigger local Toast and add to notification history
+        triggerNotification(executeMessageData);
+
+        // Trigger UI money flow animation
+        window.dispatchEvent(new CustomEvent('defi-money-flow', {
+            detail: { type: 'LIQUIDATION_EXECUTE', asset: 'XLM', amount: actualSeized }
+        }));
     };
 
     const handleResetSandbox = () => {
+        const realSupplyXLM = wallet.isConnected ? userBalances.suppliedScaled.XLM * reserves.XLM.liquidityIndex : 0;
+        const realBorrowUSDC = wallet.isConnected ? userBalances.debtScaled.USDC * reserves.USDC.borrowIndex : 0;
+        
         setSandbox((prev) => ({
             ...prev,
             xlmPrice: 0.15,
             stepActive: 0,
             sessionId: null,
-            isAutoKeeperActive: false
+            isAutoKeeperActive: false,
+            supplyXLM: realSupplyXLM,
+            borrowUSDC: realBorrowUSDC
         }));
-        if (!isRealP2PActive) {
-            setSandbox((prev) => ({
-                ...prev,
-                supplyXLM: 2000,
-                borrowUSDC: 200
-            }));
-            addLog('SYSTEM', 'Sandbox thanh lý đã được khôi phục về giá trị ban đầu. Chế độ Bot tự động đã được tắt.');
-        } else {
+        
+        if (wallet.isConnected && (realSupplyXLM > 0 || realBorrowUSDC > 0)) {
             addLog('SYSTEM', 'Sandbox thanh lý đã được reset giá XLM về $0.15. Vị thế P2P thực tế của bạn vẫn đang được đồng bộ!');
+        } else {
+            addLog('SYSTEM', 'Sandbox thanh lý đã được khôi phục về giá trị ban đầu (vị thế trống). Chế độ Bot tự động đã được tắt.');
         }
     };
 
     return (
         <div className="app-container">
+            <MoneyFlowOverlay />
             {/* Ambient Background Glows */}
             <div className="bg-glow-container">
                 <div className="bg-glow bg-glow-1"></div>
@@ -1023,7 +1467,9 @@ function App() {
                 onConnect={handleConnectWallet}
                 onDisconnect={handleDisconnectWallet}
                 currentView={currentView}
-                onNavigate={setCurrentView}
+                onNavigate={handleNavigate}
+                notifications={notifications}
+                onClearNotifications={() => setNotifications([])}
             />
 
             {currentView === 'DASHBOARD' ? (
@@ -1177,7 +1623,7 @@ function App() {
                         </div>
                     </div>
                 </>
-            ) : currentView === 'MARKET' ? (
+                    ) : currentView === 'MARKET' ? (
                 <CreditMarketPage
                     reserves={reserves}
                     userBalances={userBalances}
@@ -1191,10 +1637,14 @@ function App() {
                     txDetails={txDetails}
                     onResetTxState={handleResetTxState}
                 />
-            ) : (
+            ) : currentView === 'POOLS' ? (
                 <PoolsPage
                     reserves={reserves}
                     txHistory={txHistory}
+                />
+            ) : (
+                <SimulatorPage
+                    reserves={reserves}
                     sandbox={sandbox}
                     isRealP2P={isRealP2PActive}
                     onSlidePrice={handleSlideSandboxPrice}
@@ -1202,15 +1652,32 @@ function App() {
                     onPrepare={handlePrepareLiquidation}
                     onExecute={handleExecuteLiquidation}
                     onReset={handleResetSandbox}
-                    wallet={wallet}
+                    logs={logs}
+                    onClearLogs={() => setLogs([])}
                 />
             )}
 
-            {/* Logging terminal console */}
-            <ConsoleLogger
-                logs={logs}
-                onClear={() => setLogs([])}
-            />
+            {/* Floating Premium Neon Toast Container */}
+            <div className="toast-container" style={{
+                position: 'fixed',
+                bottom: '2rem',
+                right: '2rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+                zIndex: 10000,
+                maxWidth: '420px',
+                width: 'calc(100% - 4rem)',
+                pointerEvents: 'none'
+            }}>
+                {toasts.map((toast) => (
+                    <ToastItem 
+                        key={toast.id} 
+                        toast={toast} 
+                        onDismiss={(id) => setToasts((prev) => prev.filter(t => t.id !== id))} 
+                    />
+                ))}
+            </div>
 
             {/* Footer */}
             <Footer currentLedger={userBalances.currentLedger} />

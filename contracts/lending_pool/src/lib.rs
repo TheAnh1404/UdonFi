@@ -263,7 +263,6 @@ impl LendingPoolContract {
         a_token_client.mint(&caller, &scaled_amount);
 
         // Step 5: Update total scaled deposits
-        let total_key = PoolDataKey::ReserveByIndex(reserve_index);
         // We track totals in the pool contract directly
         Self::update_pool_total_deposits(&env, reserve_index, scaled_amount, true);
 
@@ -904,11 +903,10 @@ impl LendingPoolContract {
             .get(&balance_key)
             .unwrap_or(0);
 
-        let mut actual_collateral_burn = 0i128;
         if current_scaled_collateral > 0 {
             let seize_ray = collateral_to_seize.checked_mul(RAY).expect("overflow");
             let scaled_collateral_to_burn = seize_ray / collateral_liquidity_index;
-            actual_collateral_burn = if scaled_collateral_to_burn > current_scaled_collateral {
+            let actual_collateral_burn = if scaled_collateral_to_burn > current_scaled_collateral {
                 current_scaled_collateral
             } else {
                 scaled_collateral_to_burn
@@ -945,7 +943,7 @@ impl LendingPoolContract {
         // If they have 0 total collateral left but still have outstanding debt,
         // it means they are undercollateralized/unbacked.
         // We wipe their outstanding debt and record it as a ReserveDeficit.
-        let mut bitmap = Self::get_user_bitmap(&env, &borrower);
+        let bitmap = Self::get_user_bitmap(&env, &borrower);
         let current_scaled_collateral: i128 = env
             .storage()
             .persistent()
@@ -1089,7 +1087,6 @@ impl LendingPoolContract {
     /// to minimize CPU usage.
     fn update_reserve_indices_full(env: &Env, reserve_index: u32) -> (i128, i128) {
         // Read current state from pool storage
-        let li_key = InternalKey::RateConfig(reserve_index);
 
         // We store indices directly in pool storage keyed by reserve_index
         // using composite keys to avoid cross-contract overhead

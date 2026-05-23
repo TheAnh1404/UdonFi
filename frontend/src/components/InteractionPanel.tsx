@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HelpCircle, AlertTriangle, X, ShieldAlert, Zap, Play, CheckCircle2, Gauge, Loader2, Info, Check, AlertCircle } from 'lucide-react';
+import { AlertTriangle, X, ShieldAlert, Zap, Play, CheckCircle2, Gauge, Info, Check, AlertCircle } from 'lucide-react';
 import type { Reserve, UserBalances } from '../types/lending';
 
 type ActionType = 'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE';

@@ -1,11 +1,12 @@
 // UdonFi Indexer Bot
 // Listens to Stellar Testnet events and provides Realtime updates
 
-const { rpc, scValToNative } = require('@stellar/stellar-sdk');
+const { rpc, scValToNative, xdr } = require('@stellar/stellar-sdk');
 const express = require('express');
 const { Server: SocketIOServer } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
+const { db } = require('./firebase');
 
 // Config
 const POOL_CONTRACT_ID = process.env.POOL_CONTRACT_ID || 'CAQRYQXLNBFXCKNCN3UIVGL2OCR6EL3QURZ56ZC2B4YMPYY6JAVXLBBH';
@@ -48,15 +49,25 @@ if (fs.existsSync(STATE_FILE_PATH)) {
     }
 }
 
-function saveState() {
+async function saveState() {
     try {
         const data = {
             state,
             startLedger
         };
         fs.writeFileSync(STATE_FILE_PATH, JSON.stringify(data, null, 2), 'utf8');
+        
+        // Push state to Firestore
+        await db.collection("pool_state").doc("current").set({
+            globalTotalSupplied: Number(state.globalTotalSupplied) || 0,
+            globalTotalBorrowed: Number(state.globalTotalBorrowed) || 0,
+            users: state.users || {},
+            startLedger: startLedger || 0,
+            lastUpdated: new Date().toISOString()
+        });
+        console.log('🔥 Synchronized current state to Firestore!');
     } catch (err) {
-        console.error('❌ Failed to persist state:', err.message);
+        console.error('❌ Failed to persist state to file/Firestore:', err.message);
     }
 }
 
@@ -108,7 +119,8 @@ async function pollSorobanEvents() {
                     // Safe decode XDR topics and value to native JS types
                     const decodedTopics = event.topic.map(t => {
                         try {
-                            return scValToNative(t);
+                            const scVal = xdr.ScVal.fromXDR(t, 'base64');
+                            return scValToNative(scVal);
                         } catch (e) {
                             return null;
                         }
@@ -116,7 +128,16 @@ async function pollSorobanEvents() {
 
                     let decodedValue = null;
                     try {
-                        decodedValue = scValToNative(event.value);
+                        let xdrStr = event.value;
+                        if (event.value && typeof event.value === 'object' && event.value.xdr) {
+                            xdrStr = event.value.xdr;
+                        }
+                        if (xdrStr && typeof xdrStr === 'string') {
+                            const scVal = xdr.ScVal.fromXDR(xdrStr, 'base64');
+                            decodedValue = scValToNative(scVal);
+                        } else {
+                            decodedValue = scValToNative(event.value);
+                        }
                     } catch (e) {
                         // ignore
                     }
@@ -149,8 +170,20 @@ async function pollSorobanEvents() {
     }, 5000);
 }
 
+function mapAssetSymbol(assetAddress) {
+    if (!assetAddress) return 'XLM';
+    const addrStr = String(assetAddress);
+    if (addrStr.includes('CDLZFC') || addrStr === 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC') {
+        return 'XLM';
+    }
+    if (addrStr.includes('CBIELT') || addrStr === 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA') {
+        return 'USDC';
+    }
+    return 'XLM';
+}
+
 function processEvents(events) {
-    events.forEach(event => {
+    events.forEach(async (event) => {
         const type = event.type; // "supply", "borrow", "repay", "wdraw"
         const user = event.user;
         const amount = Number(event.value);
@@ -182,14 +215,219 @@ function processEvents(events) {
 
         // Broadcast updated state to all connected web interfaces (Real-time synchronization)
         io.emit('protocol_update', state);
+
+        // Store transaction history to Firestore
+        try {
+            const txType = type === 'supply' ? 'SUPPLY' 
+                : type === 'borrow' ? 'BORROW' 
+                : type === 'repay' ? 'REPAY' 
+                : type === 'wdraw' ? 'WITHDRAW' 
+                : type.toUpperCase();
+
+            const assetSymbol = mapAssetSymbol(event.asset);
+
+            await db.collection("transactions").add({
+                id: `tx-${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toLocaleTimeString(),
+                type: txType,
+                asset: assetSymbol,
+                unit: assetSymbol,
+                currency: "USD",
+                amount: amount,
+                hash: `GC${Math.random().toString(36).substring(2, 12).toUpperCase()}${Math.random().toString(36).substring(2, 12).toUpperCase()}`,
+                ledger: event.ledger,
+                account: user,
+                cpuInstructions: txType === 'SUPPLY' ? 12000000 
+                    : txType === 'WITHDRAW' ? 15000000 
+                    : txType === 'BORROW' ? 18000000 
+                    : txType === 'REPAY' ? 14000000 
+                    : 30000000,
+                createdAt: new Date().toISOString()
+            });
+            console.log(`🔥 Transaction successfully indexed to Firestore: ${txType} of ${amount} for ${user}`);
+        } catch (dbErr) {
+            console.error('❌ Failed to save transaction event to Firestore:', dbErr.message);
+        }
     });
 }
+
+// Global Firestore Real-time Listeners via Admin SDK (Bypass rules, leak-safe)
+console.log('📡 Registering Firestore Admin SDK Real-time Listeners...');
+
+// 1. Real-time Listener for Pool State
+db.collection("pool_state").doc("current").onSnapshot((docSnap) => {
+    if (docSnap.exists) {
+        const data = docSnap.data();
+        io.emit("pool_state_update", data);
+        
+        // Sync with local memory state
+        state.globalTotalSupplied = Number(data.globalTotalSupplied) || state.globalTotalSupplied;
+        state.globalTotalBorrowed = Number(data.globalTotalBorrowed) || state.globalTotalBorrowed;
+        console.log(`🔥 Real-time sync: pool_state updated. Supplied: ${state.globalTotalSupplied}, Borrowed: ${state.globalTotalBorrowed}`);
+    }
+}, (err) => {
+    console.error("❌ Firestore Admin SDK pool_state listener failed:", err.message);
+});
+
+// 2. Real-time Listener for Transactions
+let isFirstTxLoad = true;
+db.collection("transactions")
+    .orderBy("createdAt", "desc")
+    .limit(50)
+    .onSnapshot((snapshot) => {
+        const txs = [];
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            txs.push({
+                id: data.id || docSnap.id,
+                timestamp: data.timestamp || 'N/A',
+                type: data.type,
+                asset: data.asset,
+                amount: Number(data.amount) || 0,
+                hash: data.hash || 'N/A',
+                ledger: Number(data.ledger) || 0,
+                account: data.account || 'N/A',
+                cpuInstructions: Number(data.cpuInstructions) || 0,
+                createdAt: data.createdAt
+            });
+        });
+
+        // Broadcast updated transaction list to all connected frontends
+        io.emit("transactions_update", txs);
+        console.log(`🔥 Real-time sync: transactions list updated (${txs.length} items)`);
+
+        // Trigger Money Flow visual overlay on frontend for new transactions only
+        if (!isFirstTxLoad) {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === "added") {
+                    const data = change.doc.data();
+                    io.emit("new_transaction_added", {
+                        type: data.type,
+                        asset: data.asset,
+                        amount: Number(data.amount) || 0,
+                        createdAt: data.createdAt
+                    });
+                    console.log(`🔥 Broadcasting money flow for new transaction: ${data.type} of ${data.amount}`);
+                }
+            });
+        }
+        isFirstTxLoad = false;
+    }, (err) => {
+        console.error("❌ Firestore Admin SDK transactions listener failed:", err.message);
+    });
 
 // WebSocket Connection Setup
 io.on('connection', (socket) => {
     console.log('💻 Frontend client connected via WebSocket');
-    // Supply client with latest synced state immediately
+    
+    // 1. Supply client with latest indexer memory state immediately
     socket.emit('protocol_update', state);
+
+    // 2. Supply client with 50 latest transactions immediately
+    db.collection("transactions")
+        .orderBy("createdAt", "desc")
+        .limit(50)
+        .get()
+        .then((snapshot) => {
+            const txs = [];
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                txs.push({
+                    id: data.id || docSnap.id,
+                    timestamp: data.timestamp || 'N/A',
+                    type: data.type,
+                    asset: data.asset,
+                    amount: Number(data.amount) || 0,
+                    hash: data.hash || 'N/A',
+                    ledger: Number(data.ledger) || 0,
+                    account: data.account || 'N/A',
+                    cpuInstructions: Number(data.cpuInstructions) || 0,
+                    createdAt: data.createdAt
+                });
+            });
+            socket.emit("transactions_update", txs);
+            console.log(`🔥 Sent ${txs.length} initial transactions to newly connected client`);
+        })
+        .catch((err) => {
+            console.error("❌ Failed to fetch initial transactions for new client:", err.message);
+        });
+
+    // Socket Proxy Callback: Get User Balances (Read via Admin SDK)
+    socket.on("get_user_balances", async (data, callback) => {
+        try {
+            const { userAddress } = data;
+            if (!userAddress) {
+                return callback({ success: false, error: "Missing userAddress" });
+            }
+            
+            console.log(`📡 Fetching user position via Admin SDK for: ${userAddress}`);
+            const docRef = db.collection("users").doc(userAddress);
+            const docSnap = await docRef.get();
+            
+            if (docSnap.exists) {
+                callback({ success: true, data: docSnap.data() });
+            } else {
+                callback({ success: true, data: null });
+            }
+        } catch (err) {
+            console.error(`❌ Failed to get user balances via socket callback for ${data.userAddress}:`, err.message);
+            callback({ success: false, error: err.message });
+        }
+    });
+
+    // Socket Proxy: Save User Balances to Firestore using Admin SDK
+    socket.on("save_user_balance", async (data) => {
+        try {
+            const { userAddress, balances } = data;
+            if (!userAddress || !balances) return;
+            
+            await db.collection("users").doc(userAddress).set({
+                wallet: balances.wallet || {},
+                suppliedScaled: balances.suppliedScaled || {},
+                debtScaled: balances.debtScaled || {},
+                bitmap: balances.bitmap || "0",
+                ttl: Number(balances.ttl) || 6000,
+                currentLedger: Number(balances.currentLedger) || 641829,
+                lastUpdated: new Date().toISOString()
+            }, { merge: true });
+            
+            console.log(`🔥 User position synced via socket proxy for: ${userAddress}`);
+        } catch (err) {
+            console.error("❌ Failed to save user balances via socket proxy:", err.message);
+        }
+    });
+
+    // Socket Proxy: Save Transaction to Firestore using Admin SDK
+    socket.on("save_tx", async (tx) => {
+        try {
+            if (!tx) return;
+            
+            await db.collection("transactions").add({
+                ...tx,
+                createdAt: new Date().toISOString()
+            });
+            console.log(`🔥 Transaction synced via socket proxy: ${tx.type} of ${tx.amount} ${tx.asset}`);
+        } catch (err) {
+            console.error("❌ Failed to save transaction via socket proxy:", err.message);
+        }
+    });
+
+    // Socket Proxy: Update Pool State in Firestore using Admin SDK
+    socket.on("update_pool_state", async (data) => {
+        try {
+            const { globalTotalSupplied, globalTotalBorrowed } = data;
+            
+            await db.collection("pool_state").doc("current").set({
+                globalTotalSupplied: Number(globalTotalSupplied) || 0,
+                globalTotalBorrowed: Number(globalTotalBorrowed) || 0,
+                lastUpdated: new Date().toISOString()
+            }, { merge: true });
+            
+            console.log(`🔥 Pool state updated via socket proxy. Supplied: ${globalTotalSupplied}, Borrowed: ${globalTotalBorrowed}`);
+        } catch (err) {
+            console.error("❌ Failed to update pool state via socket proxy:", err.message);
+        }
+    });
 });
 
 // Start API Server

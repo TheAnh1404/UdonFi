@@ -8,12 +8,12 @@ interface ConsoleLoggerProps {
 }
 
 export const ConsoleLogger: React.FC<ConsoleLoggerProps> = ({ logs, onClear }) => {
-    const consoleEndRef = useRef<HTMLDivElement>(null);
+    const consoleBodyRef = useRef<HTMLDivElement>(null);
 
-    // Scroll to bottom whenever logs change
+    // Scroll to bottom of the console container internally
     useEffect(() => {
-        if (consoleEndRef.current) {
-            consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        if (consoleBodyRef.current) {
+            consoleBodyRef.current.scrollTop = consoleBodyRef.current.scrollHeight;
         }
     }, [logs]);
 
@@ -29,7 +29,7 @@ export const ConsoleLogger: React.FC<ConsoleLoggerProps> = ({ logs, onClear }) =
                 </button>
             </div>
             <div className="card-body" style={{ padding: '1rem' }}>
-                <div className="console-body">
+                <div className="console-body" ref={consoleBodyRef}>
                     {logs.length === 0 ? (
                         <div style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
                             [System] Đang chờ sự kiện giao dịch mạng thử nghiệm Soroban...
@@ -44,7 +44,6 @@ export const ConsoleLogger: React.FC<ConsoleLoggerProps> = ({ logs, onClear }) =
                             </div>
                         ))
                     )}
-                    <div ref={consoleEndRef} />
                 </div>
             </div>
         </div>

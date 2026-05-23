@@ -1,17 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
     Coins, 
     ArrowUpRight, 
     ArrowDownLeft, 
-    ShieldAlert, 
     Activity, 
     Cpu, 
     Hourglass, 
     AreaChart, 
     User, 
-    Wallet, 
-    Zap,
-    RefreshCw
+    Wallet
 } from 'lucide-react';
 import type { Reserve, UserBalances } from '../types/lending';
 import { SorobanBitmap } from './SorobanBitmap';
@@ -56,8 +53,7 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
     // Current operation state inside the wallet terminal
     const [activeAction, setActiveAction] = useState<'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE'>('SUPPLY');
     const [activeAsset, setActiveAsset] = useState<'XLM' | 'USDC'>('XLM');
-    const [amountInput, setAmountInput] = useState<string>('');
-    const [leverageVal, setLeverageVal] = useState<number>(2.0);
+
 
     // Active tab in Soroban Panel
     const [activeSorobanTab, setActiveSorobanTab] = useState<'BITMAP' | 'TTL' | 'KINKED'>('BITMAP');
@@ -84,96 +80,8 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
     const currentBorrowPower = currentTotalSuppliedVal * 0.70;
     const currentBorrowLimitPercent = currentTotalSuppliedVal > 0 ? (currentTotalDebtVal / currentBorrowPower) * 100 : 0;
 
-    // ----------------------------------------------------
-    // BEFORE / AFTER SIMULATION LOGIC
-    // ----------------------------------------------------
-    const [simulatedHealthFactor, setSimulatedHealthFactor] = useState<number>(Infinity);
-    const [simulatedBorrowLimitPercent, setSimulatedBorrowLimitPercent] = useState<number>(0);
-    const [simulatedWalletBalance, setSimulatedWalletBalance] = useState<number>(0);
-
-    useEffect(() => {
-        const amt = parseFloat(amountInput) || 0;
-        const reserve = reserves[activeAsset];
-
-        let nextWallet = wallet.isConnected ? (userBalances.wallet[activeAsset] || 0) : 0;
-        let nextSuppliedScaled = { ...userBalances.suppliedScaled };
-        let nextDebtScaled = { ...userBalances.debtScaled };
-        let nextBitmap = userBalances.bitmap;
-
-        const changeScaled = amt / (activeAction === 'SUPPLY' || activeAction === 'WITHDRAW' ? reserve.liquidityIndex : reserve.borrowIndex);
-
-        if (activeAction === 'SUPPLY') {
-            nextWallet = Math.max(0, nextWallet - amt);
-            nextSuppliedScaled[activeAsset] += changeScaled;
-            const bitToTurnOn = activeAsset === 'XLM' ? 0n : 2n;
-            nextBitmap |= (1n << bitToTurnOn);
-        } else if (activeAction === 'WITHDRAW') {
-            nextSuppliedScaled[activeAsset] = Math.max(0, nextSuppliedScaled[activeAsset] - changeScaled);
-            nextWallet += amt;
-            const remainingSupplied = nextSuppliedScaled[activeAsset] * reserve.liquidityIndex;
-            if (remainingSupplied < 0.01) {
-                nextSuppliedScaled[activeAsset] = 0;
-                const bitToTurnOff = activeAsset === 'XLM' ? 0n : 2n;
-                nextBitmap &= ~(1n << bitToTurnOff);
-            }
-        } else if (activeAction === 'BORROW') {
-            nextWallet += amt;
-            nextDebtScaled[activeAsset] += changeScaled;
-            const bitToTurnOn = activeAsset === 'XLM' ? 1n : 3n;
-            nextBitmap |= (1n << bitToTurnOn);
-        } else if (activeAction === 'REPAY') {
-            nextWallet = Math.max(0, nextWallet - amt);
-            nextDebtScaled[activeAsset] = Math.max(0, nextDebtScaled[activeAsset] - changeScaled);
-            const remainingDebt = nextDebtScaled[activeAsset] * reserve.borrowIndex;
-            if (remainingDebt < 0.01) {
-                nextDebtScaled[activeAsset] = 0;
-                const bitToTurnOff = activeAsset === 'XLM' ? 1n : 3n;
-                nextBitmap &= ~(1n << bitToTurnOff);
-            }
-        } else if (activeAction === 'LEVERAGE') {
-            const L = leverageVal;
-            const initialSupply = amt;
-            const finalSupply = initialSupply * L;
-            const borrowedUsdc = initialSupply * (L - 1) * reserves.XLM.price;
-
-            if (activeAsset === 'XLM') {
-                nextWallet = Math.max(0, nextWallet - initialSupply);
-                nextSuppliedScaled.XLM += finalSupply / reserves.XLM.liquidityIndex;
-                nextDebtScaled.USDC += borrowedUsdc / reserves.USDC.borrowIndex;
-                nextBitmap |= (1n << 0n) | (1n << 3n);
-            }
-        }
-
-        // Compute simulated position
-        const simXlmSupplied = nextSuppliedScaled.XLM * reserves.XLM.liquidityIndex;
-        const simUsdcSupplied = nextSuppliedScaled.USDC * reserves.USDC.liquidityIndex;
-        const simXlmDebt = nextDebtScaled.XLM * reserves.XLM.borrowIndex;
-        const simUsdcDebt = nextDebtScaled.USDC * reserves.USDC.borrowIndex;
-
-        const simIsXlmCollateral = ((nextBitmap & 1n) === 1n);
-        const simIsUsdcCollateral = ((nextBitmap & 4n) === 4n);
-
-        const simXlmSuppliedValue = simXlmSupplied * reserves.XLM.price;
-        const simUsdcSuppliedValue = simUsdcSupplied * reserves.USDC.price;
-        const simXlmDebtValue = simXlmDebt * reserves.XLM.price;
-        const simUsdcDebtValue = simUsdcDebt * reserves.USDC.price;
-
-        const simTotalSuppliedVal = (simIsXlmCollateral ? simXlmSuppliedValue : 0) + (simIsUsdcCollateral ? simUsdcSuppliedValue : 0);
-        const simTotalDebtVal = simXlmDebtValue + simUsdcDebtValue;
-
-        const simHf = simTotalDebtVal > 0 ? (simTotalSuppliedVal * 0.825) / simTotalDebtVal : Infinity;
-        const simPower = simTotalSuppliedVal * 0.70;
-        const simLimitPct = simTotalSuppliedVal > 0 ? (simTotalDebtVal / simPower) * 100 : 0;
-
-        setSimulatedHealthFactor(simHf);
-        setSimulatedBorrowLimitPercent(simLimitPct);
-        setSimulatedWalletBalance(nextWallet);
-
-    }, [amountInput, activeAction, activeAsset, leverageVal, userBalances, reserves, wallet.isConnected]);
-
     const handleActionChange = (action: typeof activeAction) => {
         setActiveAction(action);
-        setAmountInput('');
         // Leverage only supports XLM initially
         if (action === 'LEVERAGE') {
             setActiveAsset('XLM');
@@ -182,64 +90,8 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
 
     const handleAssetChange = (asset: 'XLM' | 'USDC') => {
         setActiveAsset(asset);
-        setAmountInput('');
     };
 
-    const handleMaxClick = () => {
-        if (!wallet.isConnected) return;
-        const bal = userBalances.wallet[activeAsset] || 0;
-        if (activeAction === 'SUPPLY') {
-            setAmountInput(bal.toString());
-        } else if (activeAction === 'WITHDRAW') {
-            const supplied = activeAsset === 'XLM' ? xlmSupplied : usdcSupplied;
-            setAmountInput(supplied.toFixed(4));
-        } else if (activeAction === 'BORROW') {
-            // Borrow max calculation (80% of remaining borrow power to stay safe)
-            const remainingPower = Math.max(0, currentBorrowPower - currentTotalDebtVal);
-            const maxBorrowVal = remainingPower * 0.80;
-            const maxBorrowAmt = maxBorrowVal / reserves[activeAsset].price;
-            setAmountInput(maxBorrowAmt.toFixed(4));
-        } else if (activeAction === 'REPAY') {
-            const debt = activeAsset === 'XLM' ? xlmDebt : usdcDebt;
-            const maxRepay = Math.min(bal, debt);
-            setAmountInput(maxRepay.toFixed(4));
-        } else if (activeAction === 'LEVERAGE') {
-            setAmountInput(bal.toString());
-        }
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        const amt = parseFloat(amountInput);
-        if (!wallet.isConnected || isNaN(amt) || amt <= 0) return;
-        onTransactionSubmit(activeAction, activeAsset, amt, activeAction === 'LEVERAGE' ? leverageVal : undefined);
-        setAmountInput('');
-    };
-
-    const isInputValid = () => {
-        const amt = parseFloat(amountInput);
-        if (isNaN(amt) || amt <= 0) return false;
-        if (!wallet.isConnected) return false;
-
-        const bal = userBalances.wallet[activeAsset] || 0;
-        if (activeAction === 'SUPPLY' && amt > bal) return false;
-        if (activeAction === 'REPAY' && amt > bal) return false;
-        if (activeAction === 'WITHDRAW') {
-            const supplied = activeAsset === 'XLM' ? xlmSupplied : usdcSupplied;
-            if (amt > supplied) return false;
-            // Guard against making health factor nợ xấu khi rút tài sản thế chấp
-            if (simulatedHealthFactor < 1.0) return false;
-        }
-        if (activeAction === 'BORROW') {
-            if (simulatedBorrowLimitPercent > 100 || simulatedHealthFactor < 1.0) return false;
-        }
-        if (activeAction === 'LEVERAGE') {
-            if (amt > bal) return false;
-            if (simulatedBorrowLimitPercent > 100 || simulatedHealthFactor < 1.0) return false;
-        }
-
-        return true;
-    };
 
     // Style helper for Health Factor
     const getHealthFactorColor = (hf: number) => {

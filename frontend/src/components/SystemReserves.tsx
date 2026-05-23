@@ -224,11 +224,11 @@ export const SystemReserves: React.FC<SystemReservesProps> = ({ reserves, onNavi
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.8rem' }}>
                                     <div>
                                         <span className="text-dim" style={{ display: 'block' }}>Tổng Nạp (Total Supply)</span>
-                                        <span style={{ fontWeight: 600 }}>${r.totalSupplied.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                                        <span style={{ fontWeight: 600 }}>${r.totalSupplied.toLocaleString(undefined, { maximumFractionDigits: 0 })} USDC</span>
                                     </div>
                                     <div>
                                         <span className="text-dim" style={{ display: 'block' }}>Tổng Vay (Total Borrow)</span>
-                                        <span style={{ fontWeight: 600 }}>${r.totalBorrowed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                                        <span style={{ fontWeight: 600 }}>${r.totalBorrowed.toLocaleString(undefined, { maximumFractionDigits: 0 })} USDC</span>
                                     </div>
                                 </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, Layers, RefreshCw, Cpu, Activity } from 'lucide-react';
+import { Zap, Layers, RefreshCw, Cpu, Activity, CheckCircle } from 'lucide-react';
 import type { LiqSandbox, Reserve } from '../types/lending';
 
 interface SorobanLiquidationProps {
@@ -98,6 +98,7 @@ export const SorobanLiquidation: React.FC<SorobanLiquidationProps> = ({
 
     return (
         <div className="soroban-tab-content active">
+            {/* Simulation Banner & Title Area */}
             <div className="liq-sandbox-header">
                 <h3>Sandbox Thanh Lý 2 Bước (Soroban CPU Limit Bypasser)</h3>
                 <p>
@@ -110,22 +111,23 @@ export const SorobanLiquidation: React.FC<SorobanLiquidationProps> = ({
                 </p>
             </div>
 
+            {/* P2P / Sim banner */}
             {isRealP2P ? (
                 <div className="p2p-status-banner real-mode" style={{
                     background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.02) 100%)',
                     border: '1px solid rgba(34, 197, 94, 0.3)',
                     borderRadius: '12px',
-                    padding: '1rem',
-                    marginBottom: '1.5rem',
+                    padding: '1.25rem',
+                    marginBottom: '0.25rem',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     boxShadow: '0 0 15px rgba(34, 197, 94, 0.05)'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
                         <span className="p2p-dot-pulse" style={{
-                            width: '10px',
-                            height: '10px',
+                            width: '12px',
+                            height: '12px',
                             backgroundColor: '#22c55e',
                             borderRadius: '50%',
                             display: 'inline-block',
@@ -133,277 +135,312 @@ export const SorobanLiquidation: React.FC<SorobanLiquidationProps> = ({
                             animation: 'pulse 1.5s infinite ease-in-out'
                         }}></span>
                         <div>
-                            <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#22c55e', fontWeight: 700, letterSpacing: '0.5px' }}>
+                            <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#22c55e', fontWeight: 700, letterSpacing: '0.5px' }}>
                                 ĐANG ĐỒNG BỘ VỊ THẾ THẬT (REAL P2P MODE)
                             </h4>
-                            <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: '1.3' }}>
+                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.82rem', color: 'var(--text-dim)', lineHeight: '1.4' }}>
                                 Sandbox đang liên kết trực tiếp với ví của bạn. Việc thanh lý sẽ tất toán khoản nợ thực tế 
                                 và khấu trừ XLM thế chấp của bạn trên Dashboard chính!
                             </p>
                         </div>
                     </div>
-                    <span className="badge badge-success" style={{ padding: '0.3rem 0.6rem', fontSize: '0.65rem', whiteSpace: 'nowrap' }}>P2P ACTIVE</span>
+                    <span className="badge badge-success" style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>P2P ACTIVE</span>
                 </div>
             ) : (
                 <div className="p2p-status-banner sim-mode" style={{
                     background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     borderRadius: '12px',
-                    padding: '1rem',
-                    marginBottom: '1.5rem',
+                    padding: '1.25rem',
+                    marginBottom: '0.25rem',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
                         <span style={{
-                            width: '10px',
-                            height: '10px',
+                            width: '12px',
+                            height: '12px',
                             backgroundColor: 'var(--text-muted)',
                             borderRadius: '50%',
                             display: 'inline-block',
                             opacity: 0.6
                         }}></span>
                         <div>
-                            <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: 600 }}>
+                            <h4 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-main)', fontWeight: 600 }}>
                                 CHẾ ĐỘ GIẢ LẬP MẪU (SIMULATION MODE)
                             </h4>
-                            <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: '1.3' }}>
+                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.82rem', color: 'var(--text-dim)', lineHeight: '1.4' }}>
                                 Bạn chưa có vị thế nạp/vay thực tế. Sandbox đang chạy trên số dư giả định mẫu. 
                                 <strong style={{ color: 'var(--cyan)' }}> Hãy sang tab Thị Trường nạp thế chấp & vay USDC</strong> để bật P2P!
                             </p>
                         </div>
                     </div>
-                    <span className="badge" style={{ background: 'rgba(255, 255, 255, 0.1)', color: 'var(--text-muted)', padding: '0.3rem 0.6rem', fontSize: '0.65rem', whiteSpace: 'nowrap' }}>MOCK ACTIVE</span>
+                    <span className="badge" style={{ background: 'rgba(255, 255, 255, 0.1)', color: 'var(--text-muted)', padding: '0.35rem 0.75rem', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>MOCK ACTIVE</span>
                 </div>
             )}
 
-            <div className="liq-sandbox-layout">
-                {/* Control Panel */}
-                <div className="liq-control-panel">
-                    <h4>Bảng Điều Khiển Giá & Trạng Thái</h4>
+            {/* UNIFIED LIQUIDATION STATION CARD (Full Width Wide Dashboard) */}
+            <div className="liq-unified-station wide-dashboard">
+                
+                {/* Station Header */}
+                <div className="station-header">
+                    <div className="station-title">
+                        <Activity className="station-pulse-icon text-cyan" size={18} />
+                        <h4>Trạm Vận Hành Thanh Lý Soroban</h4>
+                    </div>
+                    <span className={`station-status-pill ${isLiquidatable ? 'danger' : 'safe'}`}>
+                        {isLiquidatable ? 'VỊ THẾ KHÔNG AN TOÀN' : 'HỆ THỐNG AN TOÀN'}
+                    </span>
+                </div>
+
+                {/* Station Main Grid */}
+                <div className="station-body-grid">
                     
-                    <div className="control-row">
-                        <label>Thế chấp XLM:</label>
-                        <span className="input-bal-ref">{supplyAmt.toLocaleString()} XLM (${collateralValue.toFixed(2)})</span>
-                    </div>
-
-                    <div className="control-row">
-                        <label>Khoản vay USDC:</label>
-                        <span className="input-bal-ref">{debtAmt.toLocaleString()} USDC (${debtValue.toFixed(2)})</span>
-                    </div>
-
-                    <div className="price-slider-box mt-2">
-                        <div className="control-row">
-                            <label style={{ color: 'var(--yellow)', fontWeight: 600 }}>Giá XLM: ${xlmPrice.toFixed(3)}</label>
-                            <span className="text-xs text-dim">Kéo để giả lập sụt giá</span>
-                        </div>
-                        <input 
-                            type="range" 
-                            min="0.05" 
-                            max="0.25" 
-                            step="0.005"
-                            value={xlmPrice} 
-                            disabled={sandbox.stepActive > 0}
-                            onChange={(e) => onSlidePrice(parseFloat(e.target.value))}
-                        />
-                    </div>
-
-                    {/* Automated Keeper Bot Controller */}
-                    <div className="keeper-bot-box mt-3" style={{
-                        background: 'rgba(168, 85, 247, 0.04)',
-                        border: '1px solid rgba(168, 85, 247, 0.2)',
-                        borderRadius: '12px',
-                        padding: '1rem',
-                        marginBottom: '1rem'
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <Cpu className={sandbox.isAutoKeeperActive ? "text-purple animate-pulse" : "text-dim"} size={16} />
-                                <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-main)' }}>
-                                    Bot Keeper Tự Động
-                                </span>
-                            </div>
-                            <label className="switch">
-                                <input 
-                                    type="checkbox" 
-                                    checked={sandbox.isAutoKeeperActive} 
-                                    onChange={(e) => onToggleAutoKeeper(e.target.checked)}
-                                />
-                                <span className="slider round"></span>
-                            </label>
-                        </div>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.5rem', lineHeight: '1.3' }}>
-                            Tự động quét Ledger và thực thi 2 bước thanh lý khi Hệ số Sức khoẻ giảm xuống dưới 1.0.
-                        </p>
+                    {/* Left Pane - Controls & Position HUD */}
+                    <div className="station-controls-pane">
+                        <h5 className="pane-title">1. Bảng Kiểm Soát Oracle & Vị Thế</h5>
                         
-                        {sandbox.isAutoKeeperActive && (
-                            <div style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '0.5rem', 
-                                marginTop: '0.75rem', 
-                                padding: '0.4rem 0.6rem',
-                                borderRadius: '6px',
-                                background: 'rgba(168, 85, 247, 0.1)',
-                                border: '1px solid rgba(168, 85, 247, 0.3)'
-                            }}>
-                                <Activity className="text-purple animate-pulse" size={12} style={{ animationDuration: '1s' }} />
-                                <span className="text-purple" style={{ fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.5px' }}>
-                                    {isPreparing ? 'BOT KEEPER: ĐANG CHUẨN BỊ...' : isExecuting ? 'BOT KEEPER: ĐANG THỰC THI...' : isLiquidatable && sandbox.stepActive === 0 ? 'PHÁT HIỆN SỰ CỐ! ĐANG THANH LÝ...' : 'RADAR: ĐANG QUÉT LEDGER...'}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="liq-sim-results">
-                        <div className="res-row">
-                            <span>Hệ số sức khoẻ (HF):</span>
-                            <strong className={healthFactor < 1.0 ? 'text-red animated-pulse' : 'text-green'}>
-                                {healthFactor === Infinity ? '∞' : healthFactor.toFixed(3)}
-                            </strong>
-                        </div>
-                        <div className="res-row">
-                            <span>Khả năng thanh lý:</span>
-                            {isLiquidatable ? (
-                                <span className="badge badge-danger">LIQUIDATABLE</span>
-                            ) : (
-                                <span className="badge badge-success">AN TOÀN (SAFE)</span>
-                            )}
-                        </div>
-                    </div>
-
-                    <button 
-                        onClick={onReset} 
-                        className="btn btn-connect btn-block"
-                        style={{ borderColor: 'var(--red)', color: 'var(--red)' }}
-                    >
-                        <RefreshCw size={14} />
-                        <span>Reset Sandbox</span>
-                    </button>
-                    {isRealP2P && (
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textAlign: 'center', marginTop: '0.6rem', lineHeight: '1.3', opacity: 0.8 }}>
-                            * Lưu ý: Nút Reset chỉ đặt lại giá XLM về $0.15 và tắt bot. Vị thế thực tế của bạn vẫn được bảo toàn.
-                        </p>
-                    )}
-                </div>
-
-                {/* Steps Panel */}
-                <div className="liq-steps-panel">
-                    <h4>Quy Trình Thực Thi 2 Bước</h4>
-
-                    {/* Bot Scanning Radar Card */}
-                    {sandbox.isAutoKeeperActive && (
-                        <div className="bot-scanning-card" style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '1rem',
-                            background: 'rgba(168, 85, 247, 0.02)',
-                            border: '1px solid rgba(168, 85, 247, 0.1)',
-                            borderRadius: '12px',
-                            padding: '0.85rem 1rem',
-                            marginBottom: '1rem',
-                            position: 'relative',
-                            overflow: 'hidden'
-                        }}>
-                            <div className="radar-ping-container">
-                                <div className="radar-ping-ring"></div>
-                                <div className="radar-ping-ring-2"></div>
-                                <div className="radar-ping-dot"></div>
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--purple)' }}>
-                                        Mạng Lưới Keeper Off-chain (Keeper Bot Network)
-                                    </span>
-                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                                        Chu kỳ quét: 1.0s
-                                    </span>
+                        {/* Section 1: Position Telemetry HUD */}
+                        <div className="station-hud">
+                            <div className="hud-metric">
+                                <span className="hud-label">Thế Chấp XLM</span>
+                                <div className="hud-value-container">
+                                    <span className="hud-value">{supplyAmt.toLocaleString()} XLM</span>
+                                    <span className="hud-value-sub">${collateralValue.toFixed(2)}</span>
                                 </div>
-                                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginTop: '0.2rem' }}>
-                                    {isPreparing ? (
-                                        <span className="text-purple animate-pulse">🤖 Bot #404: Đang gọi prepare_liquidation() để khoá thế chấp...</span>
-                                    ) : isExecuting ? (
-                                        <span className="text-purple animate-pulse">🤖 Bot #404: Đang gọi execute_liquidation() để thu hồi tài sản...</span>
-                                    ) : isLiquidatable && sandbox.stepActive === 0 ? (
-                                        <span className="text-red animate-pulse">⚠️ Phát hiện vị thế mất an toàn (HF &lt; 1.0). Đang tự động xử lý...</span>
-                                    ) : sandbox.stepActive === 2 ? (
-                                        <span className="text-green">✅ Vị thế đã được thanh lý sạch sẽ. Trạng thái tài khoản ổn định.</span>
-                                    ) : (
-                                        <span>Đang quét định kỳ các vị thế trên Stellar Soroban Ledger...</span>
-                                    )}
-                                </span>
                             </div>
-                        </div>
-                    )}
-
-                    {/* Step 1 Card */}
-                    <div className={`liq-step-card ${isLiquidatable && sandbox.stepActive === 0 ? 'active' : ''} ${sandbox.stepActive > 0 || !isLiquidatable ? 'disabled' : ''}`}>
-                        <div className="step-num">1</div>
-                        <div className="step-details">
-                            <h5>Bước 1: Chuẩn Bị (prepare_liquidation)</h5>
-                            <p>Đọc bitmap tài khoản, khoá tài sản và sinh ID Phiên (Session ID) trên Ledger.</p>
                             
-                            {isPreparing ? (
-                                <div className="cpu-meter">
-                                    <span>Đang chạy máy ảo WASM... ({prepCpuWidth}M CPU Instructions)</span>
-                                    <div className="cpu-progress-bar">
-                                        <div className="cpu-progress-fill step-1" style={{ width: `${prepCpuWidth}%` }}></div>
+                            <div className="hud-metric">
+                                <span className="hud-label">Khoản Vay USDC</span>
+                                <div className="hud-value-container">
+                                    <span className="hud-value">{debtAmt.toLocaleString()} USDC</span>
+                                    <span className="hud-value-sub">${debtValue.toFixed(2)}</span>
+                                </div>
+                            </div>
+
+                            <div className={`hud-metric hf-metric ${isLiquidatable ? 'danger' : 'safe'}`}>
+                                <span className="hud-label">Hệ Số Sức Khoẻ (HF)</span>
+                                <div className="hud-value-container">
+                                    <span className="hud-value hf-number">
+                                        {healthFactor === Infinity ? '∞' : healthFactor.toFixed(3)}
+                                    </span>
+                                    <span className="hud-value-sub hf-status">
+                                        {isLiquidatable ? 'Mất An Toàn' : 'An Toàn'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Section 2: Interactive Price Manipulator */}
+                        <div className="station-slider-box">
+                            <div className="slider-header">
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span className="slider-title">Điều Khiển Giá XLM Oracles</span>
+                                    <span className="slider-subtitle">Kéo thanh trượt giả lập sụt giảm giá tài sản thế chấp</span>
+                                </div>
+                                <span className="slider-current-price">${xlmPrice.toFixed(3)}</span>
+                            </div>
+                            
+                            <div className="slider-input-wrapper">
+                                <span className="slider-bound">Min ($0.05)</span>
+                                <input 
+                                    type="range" 
+                                    min="0.05" 
+                                    max="0.25" 
+                                    step="0.005"
+                                    value={xlmPrice} 
+                                    disabled={sandbox.stepActive > 0}
+                                    onChange={(e) => onSlidePrice(parseFloat(e.target.value))}
+                                    className="premium-range-slider"
+                                />
+                                <span className="slider-bound">Max ($0.25)</span>
+                            </div>
+                        </div>
+
+                        {/* Section 3: Automated Keeper Bot Controller */}
+                        <div className={`station-keeper-box ${sandbox.isAutoKeeperActive ? 'active' : ''}`}>
+                            <div className="keeper-header">
+                                <div className="keeper-info">
+                                    <div className="keeper-icon-bg">
+                                        <Cpu className={`keeper-icon ${sandbox.isAutoKeeperActive ? 'pulse-purple' : ''}`} size={20} />
+                                    </div>
+                                    <div className="keeper-text">
+                                        <span className="keeper-title">Bot Keeper Off-chain Tự Động</span>
+                                        <span className="keeper-desc">Tự động quét Ledger và thực thi 2 bước khi HF dưới 1.0</span>
                                     </div>
                                 </div>
-                            ) : sandbox.stepActive >= 1 ? (
-                                <div className="session-id-box">
-                                    <span>Session ID:</span>
-                                    <code>{sandbox.sessionId?.slice(0, 16)}...</code>
+                                <label className="web3-switch">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={sandbox.isAutoKeeperActive} 
+                                        onChange={(e) => onToggleAutoKeeper(e.target.checked)}
+                                    />
+                                    <span className="web3-slider"></span>
+                                </label>
+                            </div>
+
+                            {sandbox.isAutoKeeperActive && (
+                                <div className="keeper-telemetry">
+                                    <div className="radar-indicator">
+                                        <div className="radar-ping-ring"></div>
+                                        <div className="radar-ping-ring-2"></div>
+                                        <div className="radar-ping-dot"></div>
+                                    </div>
+                                    <div className="keeper-status-stream">
+                                        <span className="keeper-status-title">TRẠNG THÁI KEEPER BOT:</span>
+                                        <span className="keeper-status-message">
+                                            {isPreparing ? (
+                                                <span className="text-purple animate-pulse">🤖 Bot #404: Đang gọi prepare_liquidation() để khóa thế chấp...</span>
+                                            ) : isExecuting ? (
+                                                <span className="text-purple animate-pulse">🤖 Bot #404: Đang gọi execute_liquidation() tất toán...</span>
+                                            ) : isLiquidatable && sandbox.stepActive === 0 ? (
+                                                <span className="text-red animate-pulse">⚠️ Phát hiện vị thế mất an toàn! Đang tự động xử lý...</span>
+                                            ) : sandbox.stepActive === 2 ? (
+                                                <span className="text-green">✅ Vị thế đã được thanh lý. Trạng thái ổn định.</span>
+                                            ) : (
+                                                <span>Đang quét định kỳ các vị thế trên Stellar Soroban Ledger...</span>
+                                            )}
+                                        </span>
+                                    </div>
                                 </div>
-                            ) : (
-                                <button 
-                                    onClick={handlePrepareClick} 
-                                    className="btn btn-cyan btn-sm mt-2"
-                                    disabled={!isLiquidatable || isPreparing || sandbox.isAutoKeeperActive}
-                                    style={{ width: 'fit-content' }}
-                                >
-                                    <Zap size={12} />
-                                    <span>Gọi prepare_liquidation() (~60M CPU)</span>
-                                </button>
+                            )}
+                        </div>
+
+                        {/* Reset button at the bottom of the left column */}
+                        <div className="station-reset-area">
+                            <button 
+                                onClick={onReset} 
+                                className="premium-reset-btn"
+                            >
+                                <RefreshCw size={14} />
+                                <span>Đặt Lại Sandbox Thử Nghiệm</span>
+                            </button>
+                            {isRealP2P && (
+                                <p className="reset-disclaimer">
+                                    * Note: Reset chỉ đặt lại giá XLM về $0.15 và tắt bot. Vị thế thực tế của bạn vẫn giữ nguyên.
+                                </p>
                             )}
                         </div>
                     </div>
 
-                    {/* Step 2 Card */}
-                    <div className={`liq-step-card ${sandbox.stepActive === 1 ? 'active' : ''} ${sandbox.stepActive !== 1 ? 'disabled' : ''}`}>
-                        <div className="step-num">2</div>
-                        <div className="step-details">
-                            <h5>Bước 2: Thực Thi (execute_liquidation)</h5>
-                            <p>Tịch thu tài sản thế chấp XLM kèm <strong>5% liquidation bonus</strong> để trả nợ USDC.</p>
-
-                            {isExecuting ? (
-                                <div className="cpu-meter">
-                                    <span>Đang giải phóng tài sản... ({execCpuWidth}M CPU Instructions)</span>
-                                    <div className="cpu-progress-bar">
-                                        <div className="cpu-progress-fill step-2" style={{ width: `${execCpuWidth}%` }}></div>
+                    {/* Right Pane - On-chain WASM Pipeline Stepper */}
+                    <div className="station-pipeline-pane">
+                        <h5 className="pane-title">2. Tiến Trình Giao Dịch 2 Bước On-chain</h5>
+                        
+                        <div className="station-stepper-flow">
+                            <div className="steps-vertical-container">
+                                
+                                {/* Step 1 Node */}
+                                <div className={`step-node ${isLiquidatable && sandbox.stepActive === 0 ? 'active' : ''} ${sandbox.stepActive > 0 ? 'completed' : ''} ${!isLiquidatable && sandbox.stepActive === 0 ? 'disabled' : ''}`}>
+                                    <div className="step-node-left">
+                                        <div className="step-node-bubble">
+                                            {sandbox.stepActive > 0 ? <CheckCircle size={18} /> : <span>1</span>}
+                                        </div>
+                                        {/* Flow line to step 2 */}
+                                        <div className={`step-flow-line ${sandbox.stepActive >= 1 ? 'glowing' : ''}`}></div>
+                                    </div>
+                                    <div className="step-node-right">
+                                        <div className="step-node-header">
+                                            <h5>Bước 1: Chuẩn Bị (prepare_liquidation)</h5>
+                                            <span className="cpu-cost">Chi Phí: ~60M CPU</span>
+                                        </div>
+                                        <p className="step-node-description">
+                                            Khóa tài sản thế chấp XLM trên Ledger Stellar và sinh mã Session ID nhằm ngăn chặn race condition.
+                                        </p>
+                                        
+                                        <div className="step-node-action-area">
+                                            {isPreparing ? (
+                                                <div className="premium-cpu-meter">
+                                                    <div className="cpu-meter-header">
+                                                        <span>Máy ảo Soroban WASM đang xử lý...</span>
+                                                        <span className="cpu-percent">{prepCpuWidth}M / 100M CPU</span>
+                                                    </div>
+                                                    <div className="premium-progress-bar">
+                                                        <div className="premium-progress-fill fill-cyan" style={{ width: `${(prepCpuWidth / 100) * 100}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            ) : sandbox.stepActive >= 1 ? (
+                                                <div className="premium-session-id">
+                                                    <span className="session-label">Session ID Khóa:</span>
+                                                    <code className="session-code">{sandbox.sessionId}</code>
+                                                </div>
+                                            ) : (
+                                                <button 
+                                                    onClick={handlePrepareClick} 
+                                                    className="premium-step-btn btn-cyan"
+                                                    disabled={!isLiquidatable || isPreparing || sandbox.isAutoKeeperActive}
+                                                >
+                                                    <Zap size={14} />
+                                                    <span>Gọi prepare_liquidation()</span>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            ) : sandbox.stepActive >= 2 ? (
-                                <div className="badge badge-success" style={{ width: 'fit-content', marginTop: '0.5rem' }}>
-                                    THANH LÝ THÀNH CÔNG!
+
+                                {/* Step 2 Node */}
+                                <div className={`step-node step-node-two ${sandbox.stepActive === 1 ? 'active' : ''} ${sandbox.stepActive >= 2 ? 'completed' : ''} ${sandbox.stepActive !== 1 ? 'disabled' : ''}`}>
+                                    <div className="step-node-left">
+                                        <div className="step-node-bubble">
+                                            {sandbox.stepActive >= 2 ? <CheckCircle size={18} /> : <span>2</span>}
+                                        </div>
+                                    </div>
+                                    <div className="step-node-right">
+                                        <div className="step-node-header">
+                                            <h5>Bước 2: Thực Thi (execute_liquidation)</h5>
+                                            <span className="cpu-cost">Chi Phí: ~30M CPU</span>
+                                        </div>
+                                        <p className="step-node-description">
+                                            Tịch thu tài sản thế chấp XLM cùng phần thưởng khuyến khích 5% để thanh toán dứt điểm dư nợ USDC.
+                                        </p>
+                                        
+                                        <div className="step-node-action-area">
+                                            {isExecuting ? (
+                                                <div className="premium-cpu-meter">
+                                                    <div className="cpu-meter-header">
+                                                        <span>Đang tất toán giao dịch thanh lý...</span>
+                                                        <span className="cpu-percent">{execCpuWidth}M / 100M CPU</span>
+                                                    </div>
+                                                    <div className="premium-progress-bar">
+                                                        <div className="premium-progress-fill fill-purple" style={{ width: `${(execCpuWidth / 100) * 100}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            ) : sandbox.stepActive >= 2 ? (
+                                                <div className="premium-success-tag">
+                                                    <CheckCircle size={14} className="text-green" />
+                                                    <span>TẤT TOÁN THANH LÝ HOÀN TẤT THÀNH CÔNG</span>
+                                                </div>
+                                            ) : (
+                                                <button 
+                                                    onClick={handleExecuteClick} 
+                                                    className="premium-step-btn btn-purple"
+                                                    disabled={sandbox.stepActive !== 1 || isExecuting || sandbox.isAutoKeeperActive}
+                                                >
+                                                    <Layers size={14} />
+                                                    <span>Gọi execute_liquidation()</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                            ) : (
-                                <button 
-                                    onClick={handleExecuteClick} 
-                                    className="btn btn-purple btn-sm mt-2"
-                                    disabled={sandbox.stepActive !== 1 || isExecuting || sandbox.isAutoKeeperActive}
-                                    style={{ width: 'fit-content' }}
-                                >
-                                    <Layers size={12} />
-                                    <span>Gọi execute_liquidation() (~30M CPU)</span>
-                                </button>
-                            )}
+
+                            </div>
+                        </div>
+
+                        {/* Educational / Explanatory footer notes inside right pane */}
+                        <div className="pipeline-gas-insights">
+                            <span className="insight-title">💡 Phân tích Tối ưu hóa Gas & CPU Soroban:</span>
+                            <p className="insight-text">
+                                Bằng cách phân tách quy trình làm 2 bước, mỗi giao dịch chỉ tiêu hao tối đa <strong>~60M CPU Instructions</strong> (bước 1) và <strong>~30M CPU Instructions</strong> (bước 2). 
+                                Nhờ vậy, UdonFi <strong>không bao giờ bị lỗi quá tải CPU (&gt;100M CPU Limit)</strong> so với việc cố gộp cả hai hoạt động trong một giao dịch đơn lẻ, tăng tính ổn định của pool lên 100%.
+                            </p>
                         </div>
                     </div>
+
                 </div>
+
             </div>
         </div>
     );
 };
-;

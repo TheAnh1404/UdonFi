@@ -164,9 +164,9 @@ export const Header: React.FC<HeaderProps> = ({
                         onClick={() => onNavigate('SIMULATOR')}
                         className="nav-btn simulator-nav-btn"
                         style={{
-                            background: currentView === 'SIMULATOR' ? 'rgba(0, 242, 254, 0.12)' : 'transparent',
-                            border: '1px solid ' + (currentView === 'SIMULATOR' ? 'rgba(0, 242, 254, 0.3)' : 'rgba(0, 242, 254, 0.15)'),
-                            color: 'var(--cyan)',
+                            background: currentView === 'SIMULATOR' ? 'rgba(255, 145, 0, 0.12)' : 'transparent',
+                            border: '1px solid ' + (currentView === 'SIMULATOR' ? 'rgba(255, 145, 0, 0.3)' : 'rgba(255, 145, 0, 0.15)'),
+                            color: '#ff9100',
                             padding: '0.45rem 1.15rem',
                             borderRadius: '8px',
                             fontSize: '0.85rem',
@@ -176,8 +176,8 @@ export const Header: React.FC<HeaderProps> = ({
                             alignItems: 'center',
                             gap: '0.45rem',
                             transition: 'var(--transition-smooth)',
-                            boxShadow: currentView === 'SIMULATOR' ? '0 0 10px rgba(0, 242, 254, 0.2)' : 'none',
-                            textShadow: '0 0 8px rgba(0, 242, 254, 0.2)',
+                            boxShadow: currentView === 'SIMULATOR' ? '0 0 10px rgba(255, 145, 0, 0.2)' : 'none',
+                            textShadow: '0 0 8px rgba(255, 145, 0, 0.2)',
                             whiteSpace: 'nowrap'
                         }}
                     >

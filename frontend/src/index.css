@@ -3185,10 +3185,10 @@ input:checked + .slider:before {
 }
 
 .simulator-nav-btn:hover {
-    box-shadow: 0 0 14px rgba(0, 242, 254, 0.35) !important;
-    background: rgba(0, 242, 254, 0.08) !important;
+    box-shadow: 0 0 14px rgba(255, 145, 0, 0.35) !important;
+    background: rgba(255, 145, 0, 0.08) !important;
     color: #fff !important;
-    border-color: rgba(0, 242, 254, 0.4) !important;
+    border-color: rgba(255, 145, 0, 0.4) !important;
 }
 
 .toast-container {

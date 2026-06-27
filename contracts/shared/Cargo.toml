@@ -1,0 +1,18 @@
+[package]
+name = "udonfi-shared"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "mod.rs"
+crate-type = ["lib"]
+
+[dependencies]
+soroban-sdk = "25.0.1"
+
+[dev-dependencies]
+soroban-sdk = { version = "25.0.1", features = ["testutils"] }
+
+[workspace]
+
+

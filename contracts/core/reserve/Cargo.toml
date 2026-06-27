@@ -1,0 +1,17 @@
+[package]
+name = "udonfi-reserve-registry"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "mod.rs"
+crate-type = ["lib"]
+
+[dependencies]
+soroban-sdk = "25.0.1"
+udonfi-shared = { path = "../../shared" }
+
+[dev-dependencies]
+soroban-sdk = { version = "25.0.1", features = ["testutils"] }
+
+[workspace]

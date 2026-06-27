@@ -1,482 +1,203 @@
-# 🍜 UdonFi — High-Performance & Premium Web3 Lending Protocol on Stellar Soroban
+# 🍜 UdonFi V2 — Decentralized Lending Protocol on Stellar Soroban
 
 [![Stellar Soroban](https://img.shields.io/badge/Stellar-Soroban-black?style=for-the-badge&logo=stellar&logoColor=white&color=080C1C)](https://soroban.stellar.org/)
 [![Rust Smart Contracts](https://img.shields.io/badge/Rust-Contracts-orange?style=for-the-badge&logo=rust&logoColor=white&color=DE7F3E)](https://www.rust-lang.org/)
+[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL-blue?style=for-the-badge&logo=postgresql&logoColor=white&color=336791)](https://www.postgresql.org/)
 [![Vite React TS](https://img.shields.io/badge/Vite_React_TS-Frontend-blue?style=for-the-badge&logo=vite&logoColor=white&color=00F2FE)](https://vitejs.dev/)
-[![Node.js Indexer](https://img.shields.io/badge/Node.js-Indexer-green?style=for-the-badge&logo=nodedotjs&logoColor=white&color=21A366)](https://nodejs.org/)
-[![Firebase Status](https://img.shields.io/badge/Firebase-Realtime-yellow?style=for-the-badge&logo=firebase&logoColor=white&color=FFCA28)](https://firebase.google.com/)
+
+UdonFi V2 is a decentralized, collateralized lending protocol built on the Stellar Soroban smart contract framework. It features an optimized risk management engine, modular contract architecture, decentralized governance, multi-oracle price feeds, and a specialized event-driven off-chain indexing architecture.
+
+The protocol optimizes for Stellar Soroban's ledger fees and transaction execution constraints through state bit-packing and split transaction flows.
 
 ---
 
-## 🌟 Project Summary & System Architecture Overview
+## 🏗️ Architecture Overview
 
-**UdonFi** is a pioneering, next-generation decentralized collateralized lending protocol built specifically for the **Stellar Soroban Smart Contracts** ecosystem. It resolves two critical challenges in Web3 lending: capital efficiency and the hardware/VM resource constraints of the host blockchain. To achieve this, UdonFi combines standard DeFi mathematical and risk management frameworks (such as the Kinked APY Curve, LTV, Liquidation Threshold, and Health Factor) with advanced engineering techniques optimized for the Soroban VM's storage ledger and CPU limits (including u128 Bitmap state-packing, a decentralized 2-Step Liquidation flow, and automated TTL storage extension).
+The protocol is structured as a monorepo containing the on-chain smart contracts, a real-time event indexing agent, a database backend, and a premium React-based dashboard.
 
-The protocol is paired with a premium client front-end utilizing a stunning **Glassmorphism & Cyberpunk Neon** aesthetic, providing a smooth, intuitive, and state-of-the-art Web3 user experience.
-
-```text
-                                UDONFI SYSTEM WORKFLOW
-                                      
-      ┌─────────────────────────────────────────────────────────────────────────────────┐
-      │                                 Stellar Network                                 │
-      │                                                                                 │
-      │   ┌────────────────────┐       On-Chain Events  ┌───────────────────────────┐   │
-      │   │  Smart Contracts   │ ─────────────────────> │     Indexer Bot (Node)    │   │
-      │   │      (Rust)        │                        │                           │   │
-      │   └────────┬───────────┘                        └─────────────┬─────────────┘   │
-      └────────────┼──────────────────────────────────────────────────┼─────────────────┘
-                   │                                                  │
-            RPC Query/Write                                    Broadcast State
-                   │                                                  │
-                   │                                     ┌────────────┴─────────────┐
-                   │                                     │                          │
-                   │                                     ▼                          ▼
-                   │                           ┌──────────────────┐       ┌──────────────────┐
-                   │                           │  Firestore Live  │       │  Socket.io Push  │
-                   │                           │     Database     │       │    (Realtime)    │
-                   │                           └────────┬─────────┘       └────────┬─────────┘
-                   ▼                                    │                          │
-      ┌─────────────────────────────────────────────────┼──────────────────────────┼────┐
-      │                                                 │                          │    │
-      │   ┌─────────────────────────────────────────────▼──────────────────────────▼┐   │
-      │   │                          UdonFi User Interface                          │   │
-      │   │                     (Vite + React + TypeScript Client)                  │   │
-      │   └─────────────────────────────────────────────────────────────────────────┘   │
-      │                                                                                 │
-      └─────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    User([User / Liquidator]) <--> |Web3 interaction| FE[React Web Client]
+    FE <--> |RPC Read / Write| SC[Soroban Smart Contracts]
+    FE <--> |REST API / WebSocket| BE[Backend Service]
+    Indexer[Event Indexer Bot] --> |Scan events| SC
+    Indexer --> |Write events & state| DB[(PostgreSQL Database)]
+    BE <--> |Read / Write| DB
+    SC <--> |Fetch prices| Oracle[Oracle Aggregator]
 ```
 
----
-
-## 📐 1. Core Financial Metrics & Mathematical Models
-
-UdonFi enforces strict decentralized financial mathematics to guarantee capital safety and automated liquidity risk governance:
-
-### A. Risk Management (LTV & Liquidation Threshold)
-*   **Maximum Loan-to-Value ($LTV_{max} = 70\%$):** The maximum percentage of debt that can be borrowed against the total value of supplied collateral. Borrow requests are rejected at the protocol simulation phase if the resulting debt exceeds $70\%$ of the collateral value.
-*   **Liquidation Threshold ($LT = 82.5\%$):** The maximum allowable debt-to-collateral ratio. If this threshold is breached, the position becomes eligible for liquidation.
-*   **Health Factor ($HF$):** A metric representing the safety of a borrower's position, calculated as:
-    $$HF = \frac{\sum (\text{Collateral Value}_i \times LT_i)}{\sum \text{Borrow Value}_j}$$
-    *   **$HF > 1.5$ (Safe Status — Neon Green):** Excellent collateralization. The position is well-shielded against short-term asset price volatility.
-    *   **$1.0 \le HF \le 1.5$ (High Risk Status — Cyber Yellow):** Warning. The user should deposit more collateral or repay debt to avoid liquidation.
-    *   **$HF < 1.0$ (Liquidation Status — Warning Red):** The position is undercollateralized. The vault is locked and becomes eligible for public liquidation.
+Detailed architectural diagrams are located in the [diagrams/](file:///d:/TheAnhProject/UdonFi/diagrams) directory:
+- [System Architecture Specification](file:///d:/TheAnhProject/UdonFi/docs/02-system-architecture.md)
+- [C4 Structural Model Diagrams](file:///d:/TheAnhProject/UdonFi/docs/03-c4-model.md)
+- [Detailed Transaction Flow Sequences](file:///d:/TheAnhProject/UdonFi/docs/04-business-flows.md)
 
 ---
 
-### B. Kinked Interest Rate Curve Algorithm
-To optimize liquidity pool utilization and protect depositors during periods of high borrowing demand, UdonFi uses a variable interest rate model based on the pool's Utilization Rate ($U$):
-$$U = \frac{\text{Total Borrowed}}{\text{Total Supplied}}$$
+## ⚡ Core Features & Engineering Optimizations
 
-The **Borrow APY** ($R_t$) calculation is split into two phases relative to the optimal utilization threshold $U_{optimal}$ (set at $80\%$):
+### 1. Modular Smart Contract Structure
+V2 decomposes the lending logic into modular, single-responsibility smart contracts to maintain upgradeability, keep WASM sizes under VM limits, and reduce compile-time dependencies:
+- **`lending_pool`**: Core asset supply and withdrawal coordinator.
+- **`risk_engine`**: Vault health factor evaluation.
+- **`interest_rate_engine`**: Kinked APY calculation.
+- **`liquidation_coordinator`**: 2-step liquidation processing.
+- **`governance`**: Proposal submission, voting, and contract timelocks.
+- **`price_oracle_aggregator`**: Decoupled price compilation interface.
+- **`reserve_config`**: Reserve configuration registry.
 
-1.  **Phase 1: Capital Abundance ($U \le 80\%$):**
-    $$R_t = R_{base} + \left( \frac{U}{U_{optimal}} \right) \times R_{slope1}$$
-    *Borrow APY increases gradually (e.g., from 1% to 5%) to encourage borrowing and leverage.*
+### 2. State-Packing Bitmap
+User vault settings are packed into a single `u128` integer rather than utilizing dynamic key-value storage. By dedicating 2 bits per asset market (Bit $2i$ for Collateral eligibility, Bit $2i+1$ for Borrow active status), read/write storage overhead is minimized.
 
-2.  **Phase 2: Liquidity Scarcity ($U > 80\%$):**
-    $$R_t = R_{base} + R_{slope1} + \left( \frac{U - U_{optimal}}{100\% - U_{optimal}} \right) \times R_{slope2}$$
-    *Borrow APY rises exponentially (up to 90%) to penalize over-borrowing, forcing borrowers to repay their loans and incentivizing depositors to supply more capital to restore pool liquidity.*
+### 3. CPU-Resilient 2-Step Liquidation
+To prevent transaction failures due to Soroban's 100M CPU instruction limit, liquidations are executed in two stages:
+1. **`prepare_liquidation`**: Evaluates position health, locks the targeted user collateral, and stores a cryptographically signed execution session on-chain.
+2. **`execute_liquidation`**: Pays down the debt, releases the collateral to the liquidator, and credits the liquidation bonus.
 
-**Supply APY** is calculated based on the interest paid by borrowers, scaled by the utilization rate and adjusted for the reserve fee (Reserve Factor = 10%):
-$$\text{Supply APY} = R_t \times U \times (1 - \text{Reserve Factor})$$
-
-```text
-  Borrow APY (%)
-   ▲
-90 │                                                     /
-   │                                                    /
-   │                                                   / [Slope 2: Liquidity Scarcity]
-   │                                                  /
-   │                                                 /
- 5 │                                  .-------------'
-   │                      .----------'  [Kink at 80%]
- 1 │          .----------' [Slope 1]
-   └──────────┴───────────────────────┴──────────────────┴───────► Utilization Rate (U)
-             0%                      80%                100%
-```
+### 4. Automated TTL Extensions
+Every write action (Supply, Borrow, Repay, Withdraw) automatically executes a storage TTL extension (`extend_ttl`) to ensure crucial user positions do not expire or get evicted from the ledger state.
 
 ---
 
-## 🛠️ 2. Soroban-Specific Technical Optimizations
+## 🛠️ Technology Stack
 
-The Stellar Soroban blockchain enforces unique resource constraints regarding ledger storage and CPU usage. UdonFi implements several innovative architectures to optimize performance under these constraints:
-
-### A. u128 State Bitmap Matrix (Ledger Storage Optimization)
-Instead of storing a user's collateral and debt asset lists in dynamic arrays (Vectors) or maps (Maps)—which consumes substantial storage capacity and gas fees for read/write operations—UdonFi packs the entire account configuration into a **single `u128` integer**:
-*   Each asset in the protocol is allocated **2 bits**:
-    *   **Bit $2i$ (Collateral Flag):** Indicates whether asset $i$ is enabled as collateral (e.g., XLM Collateral is Bit 0).
-    *   **Bit $2i + 1$ (Borrow Flag):** Indicates whether asset $i$ is actively borrowed (e.g., XLM Borrow is Bit 1).
-*   State checks and updates are performed using highly efficient bitwise operations:
-    *   *Enable collateral*: `bitmap |= (1 << 2i)`
-    *   *Check borrowed state*: `(bitmap >> (2i + 1)) & 1 == 1`
-*   **Result:** This layout reduces ledger storage footprint and yields up to a **95% reduction in Soroban storage fees**.
+- **Smart Contracts**: Rust, Soroban SDK (v25.0.1).
+- **Frontend Client**: React 19, Vite 8, TypeScript, custom glassmorphism styling, Tailwind, Lucide React.
+- **Backend Services**: Node.js, Express/Fastify, TypeScript.
+- **Database Layer**: PostgreSQL (with Redis for websocket cache).
+- **Indexer Bot**: Node.js, Stellar SDK (XDR decoding).
+- **Oracle Integrations**: Pyth Network, Band Protocol.
 
 ---
 
-### B. 2-Step Liquidation Protocol (Bypassing CPU Limits)
-Soroban enforces a strict CPU execution limit of **100 million instructions** per transaction. A traditional single-transaction liquidation (fetching oracle prices, compounding interest rates, evaluating Health Factor, executing debt repayments, and transferring collateral) typically consumes **100M - 120M instructions**, causing transactions to instantly fail.
-
-UdonFi solves this via a decentralized **2-Step Liquidation mechanism**:
-
-```text
-                       SAFE 2-STEP LIQUIDATION FLOW
-                       
-       ┌────────────────────────┐                   ┌────────────────────────┐
-       │  prepare_liquidation() │ ── Session ID ──> │ execute_liquidation()  │
-       │  (~60M CPU Instructions)│                   │ (~30M CPU Instructions)│
-       └───────────┬────────────┘                   └───────────┬────────────┘
-                    │                                            │
-         - Evaluate Health Factor                     - Liquidator pays debt
-         - Lock Collateral                            - Release collateral
-         - Generate & Store Session ID                - Transfer 5% liquidation bonus
-```
-By splitting the intensive operation into two distinct, cryptographically linked transactions, each execution step stays well below the 100M instruction limit. This guarantees that liquidations process smoothly without hitting VM limits.
-
----
-
-### C. Automated TTL Extension (Ledger Eviction Protection)
-To prevent ledger bloat, Soroban requires all stored data entries to maintain a Time-To-Live (TTL) counter tracked in ledger blocks. UdonFi's data naturally decays over time.
-*   If the TTL drops to 0, account balances and states are **evicted** from the active ledger.
-*   UdonFi integrates an automated **TTL extension (`extend_ttl`)** mechanism. Whenever a user interacts with the protocol (Supply, Borrow, Repay, or Withdraw), the contract automatically extends the storage entry's TTL to a maximum of **6,000 ledgers**, ensuring persistent storage state at minimal expense.
-
----
-
-## 📂 3. Repository Directory Structure
-
-The project repository is structured as a Monorepo:
+## 📂 Repository Directory Structure
 
 ```text
 UdonFi/
-├── contracts/                  # Smart Contracts Source Code (Rust)
-│   ├── lending_pool/           # Core router contract managing deposits, borrows, and dynamic APY
-│   ├── liquidation/            # Contract managing the 2-step liquidation process
-│   ├── reserve/                # Contract managing configurations for asset reserves
-│   ├── price_oracle/           # Mock price oracle for XLM/USDC rates
-│   ├── a_token/                # Yield-bearing token representing deposited assets
-│   ├── debt_token/             # Debt-tracking token representing borrowed assets
-│   ├── common/                 # Shared structures, macros, and bitwise math library
-│   └── deploy.ps1              # Automation script for deployment to Soroban Testnet
+├── contracts/                  # Soroban Smart Contracts (Rust)
+│   ├── lending_pool/           # Core supply/withdraw logic
+│   ├── liquidation/            # 2-step liquidation coordinator
+│   ├── reserve/                # Reserve config registry
+│   ├── price_oracle/           # Oracle aggregator interface
+│   ├── common/                 # Bitwise math & shared libraries
+│   └── README.md               # Contract developer handbook
 │
-├── indexer_bot/                # Node.js event indexer bot for Soroban events
-│   ├── index.js                # Event polling loop, XDR parsing, and Socket.io emitter
-│   ├── firebase.js             # Firestore Sync and Firebase Admin configuration
-│   └── package.json            # Project dependencies
+├── frontend/                   # React Web3 Dashboard
+│   ├── src/                    # Components, hooks, state
+│   └── README.md               # Frontend styling & wallet layers
 │
-└── frontend/                   # Premium Web3 client UI (React + TS + Vite)
-    ├── src/
-    │   ├── types/              # Type-safe Web3 declarations
-    │   ├── components/         # Premium styled UI components
-    │   │   ├── Header.tsx      # Navigation, TVL, and non-blocking notification drawer
-    │   │   ├── SorobanBitmap.tsx # 128-bit LED matrix for packing visualization
-    │   │   ├── SorobanKinked.tsx # Interactive SVG dynamic APY chart
-    │   │   ├── SimulatorPage.tsx # In-memory local blockchain simulation dashboard
-    │   │   └── ConsoleLogger.tsx # Real-time RPC transaction feed
-    │   ├── index.css           # Custom CSS Tokens (Glassmorphism & Neon Glow theme)
-    │   └── App.tsx             # Global state, contract integration, and financial math
-    └── vite.config.ts          # Vite compilation configuration
+├── backend/                    # TypeScript REST & WebSocket Service
+│   └── README.md               # Backend APIs & DB synchronization
+│
+├── indexer/                    # PostgreSQL Event Indexer Bot
+│   └── README.md               # Event pipelines & decoders
+│
+├── docs/                       # Core Technical Specifications
+│   ├── adr/                    # Architecture Decision Records
+│   └── README.md               # Index of technical specifications
+│
+├── diagrams/                   # Mermaid Architectural Diagrams
+│
+├── tests/                      # Testing Framework Specifications
+│   └── README.md               # Fuzz, load, and E2E specs
+│
+└── scripts/                    # Deploy & Protocol Admin automation
+    └── README.md               # Script registry and parameters
 ```
 
-For quick reference to key source files, refer to:
-*   Core Lending Pool: [lending_pool](file:///d:/TheAnhProject/UdonFi/contracts/lending_pool)
-*   Liquidation Router: [liquidation](file:///d:/TheAnhProject/UdonFi/contracts/liquidation)
-*   Asset Configuration: [reserve](file:///d:/TheAnhProject/UdonFi/contracts/reserve)
-*   Price Feed Oracle: [price_oracle](file:///d:/TheAnhProject/UdonFi/contracts/price_oracle)
-*   Yield Token: [a_token](file:///d:/TheAnhProject/UdonFi/contracts/a_token)
-*   Debt Token: [debt_token](file:///d:/TheAnhProject/UdonFi/contracts/debt_token)
-*   Shared Utilities & Math: [common](file:///d:/TheAnhProject/UdonFi/contracts/common)
-*   Smart Contract Deploy Script: [deploy.ps1](file:///d:/TheAnhProject/UdonFi/contracts/deploy.ps1)
-*   Indexer Bot Loop: [index.js](file:///d:/TheAnhProject/UdonFi/indexer_bot/index.js)
-*   Indexer Firebase Handler: [firebase.js](file:///d:/TheAnhProject/UdonFi/indexer_bot/firebase.js)
-*   Navigation & Stats: [Header.tsx](file:///d:/TheAnhProject/UdonFi/frontend/src/components/Header.tsx)
-*   Bitmap Matrix LED Grid: [SorobanBitmap.tsx](file:///d:/TheAnhProject/UdonFi/frontend/src/components/SorobanBitmap.tsx)
-*   Interactive SVG APY Chart: [SorobanKinked.tsx](file:///d:/TheAnhProject/UdonFi/frontend/src/components/SorobanKinked.tsx)
-*   Client Blockchain Simulator: [SimulatorPage.tsx](file:///d:/TheAnhProject/UdonFi/frontend/src/components/SimulatorPage.tsx)
-*   Interactive Transaction Logger: [ConsoleLogger.tsx](file:///d:/TheAnhProject/UdonFi/frontend/src/components/ConsoleLogger.tsx)
-*   Design Design Tokens: [index.css](file:///d:/TheAnhProject/UdonFi/frontend/src/index.css)
-*   State Coordinator & Flow: [App.tsx](file:///d:/TheAnhProject/UdonFi/frontend/src/App.tsx)
-*   Vite configuration: [vite.config.ts](file:///d:/TheAnhProject/UdonFi/frontend/vite.config.ts)
+---
+
+## 📝 Documentation Index
+
+All architectural decisions and mathematical parameters are documented in detail inside the [docs/](file:///d:/TheAnhProject/UdonFi/docs) folder:
+
+### 1. Specifications
+*   [00-Overview](file:///d:/TheAnhProject/UdonFi/docs/00-overview.md): Executive overview and system objectives.
+*   [01-Product Requirements](file:///d:/TheAnhProject/UdonFi/docs/01-product-requirements.md): System capabilities, mathematical definitions, and constraints.
+*   [02-System Architecture](file:///d:/TheAnhProject/UdonFi/docs/02-system-architecture.md): Blueprint of the codebase, boundary layouts, and sub-systems.
+*   [03-C4 Model](file:///d:/TheAnhProject/UdonFi/docs/03-c4-model.md): Context, Container, Component, and Deployment schemas.
+*   [04-Business Flows](file:///d:/TheAnhProject/UdonFi/docs/04-business-flows.md): Step-by-step transaction flow sequence diagrams.
+*   [05-Smart Contract Spec](file:///d:/TheAnhProject/UdonFi/docs/05-smart-contract-spec.md): Methods, storage parameters, and state transition validation rules.
+*   [06-API Spec](file:///d:/TheAnhProject/UdonFi/docs/06-api-spec.md): REST endpoints and real-time WebSockets specifications.
+*   [07-Database Design](file:///d:/TheAnhProject/UdonFi/docs/07-database-design.md): PostgreSQL Schema design, indexes, and ERD.
+*   [08-Security Model](file:///d:/TheAnhProject/UdonFi/docs/08-security-model.md): Threat modeling, risk matrix, and circuit-breaker details.
+*   [09-Testing Strategy](file:///d:/TheAnhProject/UdonFi/docs/09-testing-strategy.md): Unit, integration, fuzzing, and load testing guidelines.
+*   [10-Deployment Plan](file:///d:/TheAnhProject/UdonFi/docs/10-deployment-plan.md): Multi-sig administration, TTL variables, and mainnet checklist.
+*   [11-Governance](file:///d:/TheAnhProject/UdonFi/docs/11-governance.md): Proposal lifecycles, voting formulas, and voting locks.
+*   [12-Roadmap](file:///d:/TheAnhProject/UdonFi/docs/12-roadmap.md): Milestones, token distribution, and token integration phases.
+*   [13-Financial Spec](file:///d:/TheAnhProject/UdonFi/docs/13-financial-specification.md): Double-entry accounting system and transaction balance shifts.
+*   [14-Mathematical Spec](file:///d:/TheAnhProject/UdonFi/docs/14-mathematical-specification.md): Fixed-point math constraints, rounding, and numerical examples.
+*   [15-Protocol Invariants](file:///d:/TheAnhProject/UdonFi/docs/15-protocol-invariants.md): Detailed 40+ system rules, parameters, and checks.
+*   [16-State Machine Spec](file:///d:/TheAnhProject/UdonFi/docs/16-state-machine-specification.md): Mermaid transition flows for contracts, users, and proposals.
+*   [17-Failure Mode Analysis](file:///d:/TheAnhProject/UdonFi/docs/17-failure-mode-analysis.md): Catalog of 35+ system failure modes and mitigation strategies.
+*   [18-Economic Attack Model](file:///d:/TheAnhProject/UdonFi/docs/18-economic-attack-model.md): Threat modeling of 15 economic attack profiles and test rules.
+*   [19-Threat Model](file:///d:/TheAnhProject/UdonFi/docs/19-threat-model.md): Trust boundaries, STRIDE parameters, and incident playbook.
+*   [20-Gas & Storage Optimization](file:///d:/TheAnhProject/UdonFi/docs/20-gas-storage-optimization.md): Storage layout bit-packing and CPU limits budgets.
+*   [21-Performance Budget](file:///d:/TheAnhProject/UdonFi/docs/21-performance-budget.md): Latency rules and throughput limits for APIs and db pools.
+
+### 2. Architecture Decision Records (ADRs)
+*   [ADR-0001: Use Stellar Soroban](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0001-use-stellar-soroban.md): Rationale behind using Soroban WASM virtual machine.
+*   [ADR-0002: Event-Driven Architecture](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0002-event-driven-architecture.md): Building on-chain event indexers.
+*   [ADR-0003: PostgreSQL instead of Firebase](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0003-postgresql-instead-of-firebase.md): Selecting relational storage for database transactional security.
+*   [ADR-0004: Modular Smart Contracts](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0004-modular-smart-contracts.md): Decoupling lending vaults from math engines.
+*   [ADR-0005: Oracle Aggregator](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0005-oracle-aggregator.md): Mitigating pricing failures via multi-oracle aggregators.
+*   [ADR-0006: Upgradeability & Migration Strategy](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0006-upgradeability-and-migration-strategy.md): Contract update policies and storage schema migrations.
+*   [ADR-0007: Emergency Pause & Guardian Model](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0007-emergency-pause-and-guardian-model.md): Temporary pausing and Emergency Guardian roles.
+*   [ADR-0008: Oracle Failure Handling](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0008-oracle-failure-handling.md): Fallback paths and deviation check algorithms.
+*   [ADR-0009: Interest Index Accounting Model](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0009-interest-index-accounting-model.md): Index-based compounding equations.
+*   [ADR-0010: Governance Timelock Policy](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0010-governance-timelock-policy.md): Standard durations and delay parameters.
+
+### 3. Project Management & Planning Backlog
+*   [01-Product Backlog](file:///d:/TheAnhProject/UdonFi/docs/project-management/01-product-backlog.md): Overview of epics, requirements, and deliverables.
+*   [02-Epic Breakdown](file:///d:/TheAnhProject/UdonFi/docs/project-management/02-epic-breakdown.md): Engineering task backlog with specific task descriptions.
+*   [03-Sprint Plan](file:///d:/TheAnhProject/UdonFi/docs/project-management/03-sprint-plan.md): Objectives, deliverables, and validation for 11 sprints.
+*   [04-Task Dependency](file:///d:/TheAnhProject/UdonFi/docs/project-management/04-task-dependency.md): Dependency mappings, critical path, and parallel tracks.
+*   [05-Definition of Done](file:///d:/TheAnhProject/UdonFi/docs/project-management/05-definition-of-done.md): Standards for complete engineering tasks.
+*   [06-Definition of Ready](file:///d:/TheAnhProject/UdonFi/docs/project-management/06-definition-of-ready.md): Standards for task readiness before development.
+*   [07-Coding Guidelines](file:///d:/TheAnhProject/UdonFi/docs/project-management/07-coding-guidelines.md): Style rules, folder structures, and git templates.
+*   [08-Code Review Checklist](file:///d:/TheAnhProject/UdonFi/docs/project-management/08-code-review-checklist.md): Standards for PR reviews.
+*   [09-Testing Checklist](file:///d:/TheAnhProject/UdonFi/docs/project-management/09-testing-checklist.md): Invariants mapped directly to test suites.
+*   [10-Release Checklist](file:///d:/TheAnhProject/UdonFi/docs/project-management/10-release-checklist.md): Staging and production release guidelines.
+*   [11-Risk Register](file:///d:/TheAnhProject/UdonFi/docs/project-management/11-risk-register.md): Registry of project, financial, and technical risks.
+*   [12-Developer Onboarding](file:///d:/TheAnhProject/UdonFi/docs/project-management/12-developer-onboarding.md): Setup procedures for new engineers.
 
 ---
 
-## 🚀 4. Installation & Local Setup Guide
+## 🚀 Development Workflow
 
-UdonFi can be run in two modes: a quick **Offline Sandbox** mode (requiring no external setup) or a **Full Testnet Integration** mode.
+Follow this procedure to contribute code changes:
 
-### Option A: Quick Start with Offline Simulator (Recommended for Demo)
-The frontend application features a fully integrated **in-memory blockchain simulator** running directly inside your browser. This allows you to demo all DeFi features instantly without setting up local nodes or wallets:
-
-1.  **Navigate to the frontend directory:**
-    ```bash
-    cd frontend
-    ```
-2.  **Install dependencies and spin up the development server:**
-    ```bash
-    npm install
-    npm run dev
-    ```
-3.  Open `http://localhost:5173` in your browser and click on the **"Simulator"** tab in the header to begin testing!
-
----
-
-### Option B: Run Realtime Indexer Bot (Cloud Synced)
-To sync state in real-time from the Stellar Testnet to a shared database:
-
-1.  **Configure Firebase Key**: Place your Firebase credentials file at `indexer_bot/serviceAccountKey.json`.
-2.  **Navigate to the indexer bot directory:**
-    ```bash
-    cd indexer_bot
-    ```
-3.  **Launch the event scanner:**
-    ```bash
-    npm install
-    npm start
-    ```
-    The indexer bot will open a Socket.io server on port `3001` to broadcast live transaction events directly to the frontend!
-
----
-
-### Option C: Compile & Deploy Smart Contracts (Rust)
-To modify or redeploy UdonFi's smart contracts to the Stellar Testnet:
-
-1.  **Compile all Soroban contracts to WASM:**
-    ```bash
-    cd contracts
-    cargo build --target wasm32v1-none --release
-    ```
-2.  **Run unit tests for math and liquidation logic:**
-    ```bash
-    cargo test
-    ```
-3.  **Automated Deployment (Requires Stellar CLI):**
-    ```powershell
-    ./deploy.ps1
-    ```
-
----
-
-## 🎨 5. Premium Interface & UX Features
-
-UdonFi sets a new standard for Web3 lending user experiences, showcasing rich visualizations of complex blockchain operations:
-
-*   **🍜 Steaming Udon Bowl**: A purely CSS-animated neon Udon bowl with changing gradients on the top-left, representing liquid liquidity flows.
-*   **📊 Dynamic SVG APY Chart**: An interactive SVG chart displaying pool Utilization ($U$) as a neon green dot that glides along the kinked curve in real-time as users deposit or borrow.
-*   **🟩 128-bit Bitmap LED Grid**: An interactive matrix showing the bit-packing of the ledger. Hover over or click on any LED to see the bitwise evaluation logic and simulate state transitions.
-*   **🔔 Non-blocking Header Notification Drawer**: Rather than interrupting actions with intrusive page redirects or modal blockages, all transaction confirmations, pending states, and error traces are delivered cleanly through a header notification drawer.
-*   **🕹️ Time-Travel Simulator**: Accelerate blockchain time forward in the simulator to watch compound interest accumulate block-by-block and manually trigger liquidations on bad debt.
-
----
-
-## 🧪 6. End-to-End DeFi Testing Walkthrough (Supply → Withdraw → Borrow → Repay)
-
-This section guides you through the full lifecycle of a DeFi transaction sequence on UdonFi, including the **Auto-Reset** and **Full Redeploy** mechanisms.
-
----
-
-### 📋 6.1 Prerequisites
-
-Before starting, please ensure the following setup is complete:
-
-| # | Requirement | Steps |
-|---|-------------|-------|
-| 1 | **Freighter Wallet Installed** (Chrome Extension) | Install from [freighter.app](https://www.freighter.app/) -> Set network to **Testnet** |
-| 2 | **Account Funded & Active on Testnet** | Use [Friendbot](https://friendbot.stellar.org/?addr=YOUR_ADDRESS) or run script: `node indexer_bot/fund_user.js` |
-| 3 | **USDC Trustline Registered** | On UdonFi UI -> Credit Markets -> Click **"Register USDC Trustline"** |
-| 4 | **Frontend Running** | `cd frontend && npm install && npm run dev` -> Access `http://localhost:5173` |
-| 5 | **Indexer Bot Running (Optional)** | `cd indexer_bot && npm install && npm start` -> Running at `http://localhost:3001` |
-| 6 | **Contracts Deployed on Testnet** | See section 6.5 below if redeployment is required |
-
----
-
-### 💰 6.2 Funding Your Wallet
-
-**Step 1: Obtain XLM from Friendbot**
-
-Open your terminal and run:
+### 1. Branch Checkout & Setup
+Check out a development branch from the `develop` base:
 ```bash
-cd indexer_bot
-node fund_user.js
+git checkout -b feature/your-feature-name develop
 ```
-Or access the Friendbot endpoint directly using your wallet address:
-```
-https://friendbot.stellar.org/?addr=YOUR_FREIGHTER_ADDRESS
-```
-> ⚠️ **Note:** Each Friendbot request yields 10,000 Testnet XLM. You can query it multiple times if needed.
 
-**Step 2: Obtain custom USDC tokens**
-
-USDC on UdonFi uses a custom token contract deployed at:
-```
-CAO2VFOWACEHKUJXGFDX5MOYFDGL2OANBOB3AK33CUR6R3A2Y5IC65XQ
-```
-Use the script [initialize_reserves.js](file:///d:/TheAnhProject/UdonFi/contracts/initialize_reserves.js) to mint USDC to your wallet address.
-
----
-
-### 🔄 6.3 Sequential Testing Walkthrough
-
-> **Recommended sequence:** `SUPPLY` → `WITHDRAW` → `BORROW` → `REPAY`
-
-#### 🟢 Step 1: SUPPLY (Deposit)
-
-1. Go to the **"Credit Markets"** tab on the dashboard.
-2. Connect your Freighter wallet (click the "Connect Freighter Wallet" button).
-3. Select the **"Deposit"** tab on the right interaction panel.
-4. Choose an asset: **XLM** or **USDC**.
-5. Enter amount (e.g., `100 XLM`).
-6. Click **"SUPPLY TO LIQUIDITY POOL"**.
-7. Approve and sign the transaction in the Freighter popup.
-
-**Expected Results:**
-- ✅ Log output: `Congratulations! SUPPLY transaction confirmed successfully`
-- ✅ Transaction hash is logged and recorded in user history.
-- ✅ The "Total Collateral Supplied" metric increases accordingly.
-- ✅ Bitmap LED for Bit 0 (XLM Collateral Flag) glows neon green.
-
-#### 🔵 Step 2: WITHDRAW
-
-> **Prerequisite:** Active supply balance.
-
-1. Select the **"Withdraw"** tab on the panel.
-2. Select the asset (e.g., **XLM**).
-3. Enter withdrawal amount (cannot exceed your supply balance).
-4. Click **"WITHDRAW TO WALLET"**.
-5. Sign the transaction with Freighter.
-
-**Expected Results:**
-- ✅ Log output: `Congratulations! WITHDRAW transaction confirmed successfully`
-- ✅ Wallet balance increases, total collateral supplied decreases.
-- ✅ If fully withdrawn, the corresponding Collateral LED flag turns off.
-
-> **⚠️ Critical Note:** If you have active loans, withdrawing collateral decreases your Health Factor. If the resulting HF drops below 1.0, the transaction will automatically revert on the Soroban VM.
-
-#### 🟣 Step 3: BORROW
-
-> **Prerequisite:** Active collateral supplied with its collateral flag enabled.
-
-1. Select the **"Borrow"** tab on the panel.
-2. Select the asset you want to borrow (e.g., **USDC**).
-3. Enter borrow amount (must satisfy the Max LTV threshold of $\le 70\%$).
-4. Review the **simulated Health Factor** on the panel before submitting.
-5. Click **"BORROW FROM LIQUIDITY POOL"**.
-6. Sign the transaction via Freighter.
-
-**Expected Results:**
-- ✅ Log output: `Congratulations! BORROW transaction confirmed successfully`
-- ✅ Wallet balance increases, "Total Borrow Balance" increases.
-- ✅ Health Factor Gauge shifts from ∞ to a concrete numerical ratio.
-- ✅ Bitmap LED for Bit 3 (USDC Borrow Flag) glows neon purple.
-
-#### 🔴 Step 4: REPAY
-
-> **Prerequisite:** Active debt balance.
-
-1. Select the **"Repay"** tab on the panel.
-2. Select the borrowed asset (e.g., **USDC**).
-3. Enter repayment amount (click **MAX** to clear entire debt).
-4. Click **"REPAY LIQUIDITY POOL"**.
-5. Sign the transaction via Freighter.
-
-**Expected Results:**
-- ✅ Log output: `Congratulations! REPAY transaction confirmed successfully`
-- ✅ The "Total Borrow Balance" decreases.
-- ✅ Health Factor ratio increases (safer position).
-- ✅ If fully repaid, the Borrow LED flag switches off and Health Factor resets to ∞.
-
----
-
-### ⚡ 6.4 Auto-Reset Protocol Mechanism
-
-UdonFi features an **Auto-Reset Protocol** mechanism that refreshes the testing suite after every successful transaction, enabling rapid, frictionless sandbox testing without manual cleanups.
-
-**How it works:**
-1. Once any contract interaction (Supply, Withdraw, Borrow, Repay, or Liquidation) succeeds on-chain,
-2. The system waits for **6 seconds** before triggering the redeployment script.
-3. A fresh protocol iteration is deployed with clean ledger states.
-4. Prior transactions and logs remain indexed and recorded in your **Firestore history**.
-
-**Toggling Auto-Reset:**
-- A dedicated **"Auto Reset"** toggle switch is available in the header.
-- **ON:** Automatically redeploys and cleans state 6 seconds after a transaction success.
-- **OFF:** Retains active protocol state, permitting sequence flows.
-
-> 💡 **Recommended Testing Scenarios:**
-> 
-> | Scenario | Auto-Reset |
-> |----------|------------|
-> | Test individual functions in isolation (SUPPLY -> Reset -> BORROW -> Reset...) | **ON** |
-> | Test continuous sequences (SUPPLY -> BORROW -> REPAY -> WITHDRAW) | **OFF** |
-> | Live client demonstration | **ON** |
-
----
-
-### 🔧 6.5 Complete Protocol Redeployment & Reset
-
-When a full system reset is needed (due to corrupted states, expired contract TTLs, or updating contract logic):
-
-**Step 1: Compile smart contracts**
+### 2. Smart Contract Tests
+Execute the Rust contract tests:
 ```bash
 cd contracts
-cargo build --target wasm32v1-none --release
+cargo test
 ```
 
-**Step 2: Run redeployment script**
+### 3. Frontend Client Launch
+Run Vite dev server:
 ```bash
-node contracts/redeploy_entire_protocol.js
+cd frontend
+npm run dev
 ```
 
-The script will automatically:
-1. Deploy 7 fresh smart contracts (Mock Price Oracle, Lending Pool, Liquidation manager, 2 aTokens, 2 debtTokens).
-2. Initialize all contracts with standard configurations.
-3. Add XLM and USDC reserves to the Lending Pool.
-4. Seed the Price Oracle ($0.15 for XLM, $1.00 for USDC).
-5. Output the new **Contract IDs**.
-
-**Step 3: Update Contract IDs in the frontend**
-
-Copy the new **Lending Pool ID** from the deployment output and replace the contract address in [App.tsx](file:///d:/TheAnhProject/UdonFi/frontend/src/App.tsx):
-```typescript
-const POOL_CONTRACT_ID = 'NEW_POOL_CONTRACT_ID_HERE';  // Line 30
-```
-
-**Step 4: Update Contract IDs in the indexer bot**
-
-Update the relevant contract ID in [index.js](file:///d:/TheAnhProject/UdonFi/indexer_bot/index.js) so the event indexer tracks the new deployed contract.
-
-**Step 5: Restart the client and indexer bot**
+### 4. Code Formatting and Linting
+Ensure all linter guidelines pass before committing:
 ```bash
-# Terminal 1: Frontend
-cd frontend && npm run dev
+# Rust
+cargo fmt --all
+cargo clippy --all-targets -- -D warnings
 
-# Terminal 2: Indexer Bot (Optional)
-cd indexer_bot && npm start
+# Node.js / React
+npm run lint
 ```
 
 ---
 
-### 🔑 6.6 Protocol Contract Registry
-
-| Contract | Role | Contract ID |
-|----------|------|-------------|
-| **Lending Pool Router** | Core routing contract managing Supply, Withdraw, Borrow, and Repay | `CBP6X4XEFDSPJV7DCEQ7M4OEA2PZMXMHWMC3SE26FHOVC2AQQLZMWJY6` |
-| **XLM SAC (Native)** | Native Stellar Asset Contract wrapper for XLM | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
-| **USDC Custom Token** | Custom USDC token wrapper for UdonFi Testnet | `CAO2VFOWACEHKUJXGFDX5MOYFDGL2OANBOB3AK33CUR6R3A2Y5IC65XQ` |
-
-> ⚠️ **Note:** Contract IDs change upon running `redeploy_entire_protocol.js`. Ensure they are updated in the frontend and indexer configuration.
-
----
-
-### ❓ 6.7 Troubleshooting FAQ
-
-| Issue | Root Cause | Resolution |
-|-------|------------|------------|
-| `Account not activated` | Wallet lacks Testnet XLM balance | Run `node indexer_bot/fund_user.js` or use Friendbot |
-| `Transaction simulation failed` | Contract not initialized or ledger entries expired (TTL) | Run `node contracts/redeploy_entire_protocol.js` |
-| `Health factor below threshold` | Withdrawal or borrow amount exceeds collateral capacity | Decrease interaction amount or supply additional collateral |
-| `failed host function` (USDC) | Missing trustline for custom USDC token | Click **"Register USDC Trustline"** in the UI |
-| Wallet does not prompt signature | Freighter has not authorized local domain | Open Freighter -> Settings -> Security -> Add `localhost` to allowed list |
-| `unexpected end of file` during deployment | Stellar Testnet RPC congestion or timeout | The script automatically retries 3 times with an inclusion fee of 0.1 XLM |
-| Auto-Reset does not trigger | Auto Reset switch is disabled | Toggle the **"Auto Reset"** switch to **ON** in the header |
-
----
-
-*Meticulously designed. Engineered for the future of Web3. Welcome to UdonFi.*
+## 📄 License
+This repository is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.

@@ -54,16 +54,17 @@ pub fn validate_state_transition(
     from: ReserveStatus,
     to: ReserveStatus,
 ) -> Result<(), LendingError> {
-    if from == to {
-        return Ok(()); // No-op is valid
-    }
     match (from, to) {
-        (ReserveStatus::Uninitialized, ReserveStatus::Active) => Ok(()),
-        (ReserveStatus::Active, ReserveStatus::Frozen) => Ok(()),
-        (ReserveStatus::Active, ReserveStatus::Paused) => Ok(()),
-        (ReserveStatus::Active, ReserveStatus::Deprecated) => Ok(()),
-        (ReserveStatus::Frozen, ReserveStatus::Active) => Ok(()),
-        (ReserveStatus::Paused, ReserveStatus::Active) => Ok(()),
+        (ReserveStatus::Uninitialized, ReserveStatus::Active)
+        | (ReserveStatus::Active, ReserveStatus::Frozen)
+        | (ReserveStatus::Active, ReserveStatus::Paused)
+        | (ReserveStatus::Frozen, ReserveStatus::Active)
+        | (ReserveStatus::Frozen, ReserveStatus::Paused)
+        | (ReserveStatus::Paused, ReserveStatus::Active)
+        | (ReserveStatus::Paused, ReserveStatus::Frozen)
+        | (ReserveStatus::Active, ReserveStatus::Deprecated)
+        | (ReserveStatus::Frozen, ReserveStatus::Deprecated)
+        | (ReserveStatus::Paused, ReserveStatus::Deprecated) => Ok(()),
         _ => Err(LendingError::ReserveNotActive),
     }
 }

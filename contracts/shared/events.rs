@@ -1,6 +1,27 @@
 //! Protocol-wide event structures for UdonFi V2.
 
+pub mod category;
+pub mod header;
+pub mod metadata;
+pub mod names;
+pub mod registry;
+pub mod schema;
+pub mod serialization;
+pub mod versioning;
+
+#[cfg(test)]
+pub mod tests;
+
 use soroban_sdk::{contracttype, Address, Symbol};
+
+pub use category::*;
+pub use header::*;
+pub use metadata::*;
+pub use names::*;
+pub use registry::*;
+pub use schema::*;
+pub use serialization::*;
+pub use versioning::*;
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]

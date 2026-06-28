@@ -3,10 +3,7 @@
 //! Core Registry management operations.
 
 use crate::errors::LendingError;
-use crate::events::{
-    ReserveConfigurationUpdated, ReserveCreated, ReserveDeprecated, ReserveFrozen, ReservePaused,
-    ReserveUnfrozen, ReserveUnpaused,
-};
+use crate::events::{ReserveConfigurationUpdated, ReserveCreated};
 use crate::model::{Reserve, ReserveStatus};
 use crate::storage::{
     read_reserve, read_reserve_count, read_reserve_index_by_asset, write_reserve,
@@ -14,7 +11,6 @@ use crate::storage::{
 };
 use crate::validation::{
     validate_caps, validate_decimals, validate_liquidation_bonus, validate_ltv_and_threshold,
-    validate_state_transition,
 };
 
 use soroban_sdk::{Address, Env, Symbol, Vec};
@@ -136,113 +132,6 @@ pub fn update_configuration(
             max_ltv: Ltv(ltv),
             liquidation_threshold: BasisPoints(threshold),
             liquidation_bonus: BasisPoints(bonus),
-        },
-    );
-
-    Ok(())
-}
-
-pub fn freeze_reserve(env: &Env, reserve_id: ReserveId) -> Result<(), LendingError> {
-    let mut reserve = get_reserve(env, reserve_id)?;
-    validate_state_transition(reserve.reserve_status, ReserveStatus::Frozen)?;
-
-    reserve.reserve_status = ReserveStatus::Frozen;
-    reserve.updated_at = Timestamp(env.ledger().timestamp());
-    write_reserve(env, &reserve);
-
-    env.events().publish(
-        (
-            reserve.asset_symbol.clone(),
-            Symbol::new(env, "reserve_frozen"),
-        ),
-        ReserveFrozen {
-            asset: reserve.asset_address,
-            is_frozen: true,
-        },
-    );
-
-    Ok(())
-}
-
-pub fn unfreeze_reserve(env: &Env, reserve_id: ReserveId) -> Result<(), LendingError> {
-    let mut reserve = get_reserve(env, reserve_id)?;
-    validate_state_transition(reserve.reserve_status, ReserveStatus::Active)?;
-
-    reserve.reserve_status = ReserveStatus::Active;
-    reserve.updated_at = Timestamp(env.ledger().timestamp());
-    write_reserve(env, &reserve);
-
-    env.events().publish(
-        (
-            reserve.asset_symbol.clone(),
-            Symbol::new(env, "reserve_unfrozen"),
-        ),
-        ReserveUnfrozen {
-            asset: reserve.asset_address,
-        },
-    );
-
-    Ok(())
-}
-
-pub fn pause_reserve(env: &Env, reserve_id: ReserveId) -> Result<(), LendingError> {
-    let mut reserve = get_reserve(env, reserve_id)?;
-    validate_state_transition(reserve.reserve_status, ReserveStatus::Paused)?;
-
-    reserve.reserve_status = ReserveStatus::Paused;
-    reserve.updated_at = Timestamp(env.ledger().timestamp());
-    write_reserve(env, &reserve);
-
-    env.events().publish(
-        (
-            reserve.asset_symbol.clone(),
-            Symbol::new(env, "reserve_paused"),
-        ),
-        ReservePaused {
-            asset: reserve.asset_address,
-            is_paused: true,
-        },
-    );
-
-    Ok(())
-}
-
-pub fn unpause_reserve(env: &Env, reserve_id: ReserveId) -> Result<(), LendingError> {
-    let mut reserve = get_reserve(env, reserve_id)?;
-    validate_state_transition(reserve.reserve_status, ReserveStatus::Active)?;
-
-    reserve.reserve_status = ReserveStatus::Active;
-    reserve.updated_at = Timestamp(env.ledger().timestamp());
-    write_reserve(env, &reserve);
-
-    env.events().publish(
-        (
-            reserve.asset_symbol.clone(),
-            Symbol::new(env, "reserve_unpaused"),
-        ),
-        ReserveUnpaused {
-            asset: reserve.asset_address,
-        },
-    );
-
-    Ok(())
-}
-
-pub fn deprecate_reserve(env: &Env, reserve_id: ReserveId) -> Result<(), LendingError> {
-    let mut reserve = get_reserve(env, reserve_id)?;
-    validate_state_transition(reserve.reserve_status, ReserveStatus::Deprecated)?;
-
-    reserve.reserve_status = ReserveStatus::Deprecated;
-    reserve.updated_at = Timestamp(env.ledger().timestamp());
-    write_reserve(env, &reserve);
-
-    env.events().publish(
-        (
-            reserve.asset_symbol.clone(),
-            Symbol::new(env, "reserve_deprecated"),
-        ),
-        ReserveDeprecated {
-            asset: reserve.asset_address,
         },
     );
 

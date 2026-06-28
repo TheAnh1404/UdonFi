@@ -2,11 +2,8 @@
 
 pub mod errors;
 pub mod events;
-pub mod lifecycle;
+pub mod flow;
 pub mod model;
-pub mod permissions;
-pub mod registry;
-pub mod storage;
 pub mod validation;
 
 #[cfg(test)]
@@ -14,7 +11,6 @@ pub mod tests;
 
 pub use errors::*;
 pub use events::*;
-pub use lifecycle::*;
+pub use flow::*;
 pub use model::*;
-pub use permissions::*;
-pub use registry::*;
+pub use validation::*;

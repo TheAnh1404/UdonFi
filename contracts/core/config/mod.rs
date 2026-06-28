@@ -2,19 +2,19 @@
 
 pub mod errors;
 pub mod events;
-pub mod lifecycle;
 pub mod model;
-pub mod permissions;
-pub mod registry;
 pub mod storage;
+pub mod updates;
 pub mod validation;
+pub mod versioning;
 
 #[cfg(test)]
 pub mod tests;
 
 pub use errors::*;
 pub use events::*;
-pub use lifecycle::*;
 pub use model::*;
-pub use permissions::*;
-pub use registry::*;
+pub use storage::*;
+pub use updates::*;
+pub use validation::*;
+pub use versioning::*;

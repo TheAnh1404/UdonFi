@@ -11,9 +11,8 @@
 
 use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env};
 use udonfi_common::{
-    math::*,
-    InterestRateConfig, LendingError, ReserveConfig, ReserveDataKey, ReserveState,
-    RAY, WAD, TTL_EXTEND_TO, TTL_THRESHOLD,
+    math::*, InterestRateConfig, LendingError, ReserveConfig, ReserveDataKey, ReserveState, RAY,
+    TTL_EXTEND_TO, TTL_THRESHOLD, WAD,
 };
 
 #[contract]
@@ -24,11 +23,7 @@ impl ReserveContract {
     // ── Constructor ──────────────────────────
 
     /// Initialize a reserve with its configuration and interest rate model.
-    pub fn initialize(
-        env: Env,
-        config: ReserveConfig,
-        rate_config: InterestRateConfig,
-    ) {
+    pub fn initialize(env: Env, config: ReserveConfig, rate_config: InterestRateConfig) {
         if env.storage().instance().has(&ReserveDataKey::Config) {
             panic!("already initialized");
         }
@@ -48,27 +43,33 @@ impl ReserveContract {
             current_supply_rate: 0,
         };
 
-        env.storage()
-            .instance()
-            .set(&ReserveDataKey::LiquidityIndex, &initial_state.liquidity_index);
+        env.storage().instance().set(
+            &ReserveDataKey::LiquidityIndex,
+            &initial_state.liquidity_index,
+        );
         env.storage()
             .instance()
             .set(&ReserveDataKey::BorrowIndex, &initial_state.borrow_index);
-        env.storage()
-            .instance()
-            .set(&ReserveDataKey::TotalScaledDeposits, &initial_state.total_scaled_deposits);
-        env.storage()
-            .instance()
-            .set(&ReserveDataKey::TotalScaledBorrows, &initial_state.total_scaled_borrows);
-        env.storage()
-            .instance()
-            .set(&ReserveDataKey::LastUpdateTimestamp, &initial_state.last_update_timestamp);
-        env.storage()
-            .instance()
-            .set(&ReserveDataKey::CurrentBorrowRate, &initial_state.current_borrow_rate);
-        env.storage()
-            .instance()
-            .set(&ReserveDataKey::CurrentSupplyRate, &initial_state.current_supply_rate);
+        env.storage().instance().set(
+            &ReserveDataKey::TotalScaledDeposits,
+            &initial_state.total_scaled_deposits,
+        );
+        env.storage().instance().set(
+            &ReserveDataKey::TotalScaledBorrows,
+            &initial_state.total_scaled_borrows,
+        );
+        env.storage().instance().set(
+            &ReserveDataKey::LastUpdateTimestamp,
+            &initial_state.last_update_timestamp,
+        );
+        env.storage().instance().set(
+            &ReserveDataKey::CurrentBorrowRate,
+            &initial_state.current_borrow_rate,
+        );
+        env.storage().instance().set(
+            &ReserveDataKey::CurrentSupplyRate,
+            &initial_state.current_supply_rate,
+        );
 
         // Store interest rate config in separate keys for the reserve
         // (We'll encode it into the Config for simplicity)
@@ -95,10 +96,16 @@ impl ReserveContract {
         let time_delta = current_ts.saturating_sub(last_ts);
 
         if time_delta == 0 {
-            let li: i128 = env.storage().instance()
-                .get(&ReserveDataKey::LiquidityIndex).unwrap_or(RAY);
-            let bi: i128 = env.storage().instance()
-                .get(&ReserveDataKey::BorrowIndex).unwrap_or(RAY);
+            let li: i128 = env
+                .storage()
+                .instance()
+                .get(&ReserveDataKey::LiquidityIndex)
+                .unwrap_or(RAY);
+            let bi: i128 = env
+                .storage()
+                .instance()
+                .get(&ReserveDataKey::BorrowIndex)
+                .unwrap_or(RAY);
             return (li, bi);
         }
 
@@ -125,23 +132,27 @@ impl ReserveContract {
 
         // Update borrow index with compounded interest
         let borrow_multiplier = calculate_compounded_interest(
-            current_borrow_rate.checked_mul(1_000_000_000).expect("rate overflow"), // Convert WAD rate to RAY
+            current_borrow_rate
+                .checked_mul(1_000_000_000)
+                .expect("rate overflow"), // Convert WAD rate to RAY
             time_delta,
         )
         .expect("interest calculation overflow");
 
-        let new_borrow_index = ray_mul(old_borrow_index, borrow_multiplier)
-            .expect("borrow index overflow");
+        let new_borrow_index =
+            ray_mul(old_borrow_index, borrow_multiplier).expect("borrow index overflow");
 
         // Update liquidity index with linear interest
         let supply_multiplier = calculate_linear_interest(
-            current_supply_rate.checked_mul(1_000_000_000).expect("rate overflow"),
+            current_supply_rate
+                .checked_mul(1_000_000_000)
+                .expect("rate overflow"),
             time_delta,
         )
         .expect("interest calculation overflow");
 
-        let new_liquidity_index = ray_mul(old_liquidity_index, supply_multiplier)
-            .expect("liquidity index overflow");
+        let new_liquidity_index =
+            ray_mul(old_liquidity_index, supply_multiplier).expect("liquidity index overflow");
 
         // Persist updated indices
         env.storage()
@@ -281,8 +292,7 @@ impl ReserveContract {
         let total_deposits = Self::get_total_deposits(env.clone());
         let total_borrows = Self::get_total_borrows(env.clone());
 
-        let utilization = calculate_utilization_rate(total_deposits, total_borrows)
-            .unwrap_or(0);
+        let utilization = calculate_utilization_rate(total_deposits, total_borrows).unwrap_or(0);
 
         let borrow_rate = calculate_borrow_rate(
             utilization,
@@ -299,12 +309,8 @@ impl ReserveContract {
             .get(&ReserveDataKey::Config)
             .unwrap();
 
-        let supply_rate = calculate_supply_rate(
-            borrow_rate,
-            utilization,
-            config.reserve_factor,
-        )
-        .unwrap_or(0);
+        let supply_rate =
+            calculate_supply_rate(borrow_rate, utilization, config.reserve_factor).unwrap_or(0);
 
         env.storage()
             .instance()
@@ -325,10 +331,10 @@ mod test {
             asset: Address::generate(env),
             a_token: Address::generate(env),
             debt_token: Address::generate(env),
-            ltv: 7500,                 // 75%
+            ltv: 7500,                   // 75%
             liquidation_threshold: 8000, // 80%
-            liquidation_bonus: 500,    // 5%
-            reserve_factor: 1000,      // 10%
+            liquidation_bonus: 500,      // 5%
+            reserve_factor: 1000,        // 10%
             decimals: 7,
             is_active: true,
             is_borrowing_enabled: true,

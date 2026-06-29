@@ -11,7 +11,7 @@
 #![no_std]
 
 use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, Symbol};
-use udonfi_common::{LendingError, OracleDataKey, WAD, TTL_EXTEND_TO, TTL_THRESHOLD};
+use udonfi_common::{LendingError, OracleDataKey, TTL_EXTEND_TO, TTL_THRESHOLD, WAD};
 
 #[contracttype]
 #[derive(Clone)]
@@ -47,27 +47,22 @@ impl PriceOracleContract {
     /// # Arguments
     /// * `admin` - Admin who can update configuration
     /// * `reflector_address` - Address of the Reflector Oracle contract on Stellar
-    pub fn initialize(
-        env: Env,
-        admin: Address,
-        reflector_address: Address,
-    ) {
+    pub fn initialize(env: Env, admin: Address, reflector_address: Address) {
         if env.storage().instance().has(&OracleDataKey::Admin) {
             panic!("already initialized");
         }
 
-        env.storage()
-            .instance()
-            .set(&OracleDataKey::Admin, &admin);
+        env.storage().instance().set(&OracleDataKey::Admin, &admin);
         env.storage()
             .instance()
             .set(&OracleDataKey::ReflectorAddress, &reflector_address);
         env.storage()
             .instance()
             .set(&OracleDataKey::MaxPriceAge, &DEFAULT_MAX_PRICE_AGE);
-        env.storage()
-            .instance()
-            .set(&OracleDataKey::MaxPriceDeviation, &DEFAULT_MAX_DEVIATION_BPS);
+        env.storage().instance().set(
+            &OracleDataKey::MaxPriceDeviation,
+            &DEFAULT_MAX_DEVIATION_BPS,
+        );
 
         env.storage()
             .instance()
@@ -97,13 +92,25 @@ impl PriceOracleContract {
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
         // Try calling Reflector Oracle if a symbol is mapped for this asset
-        if let Some(symbol) = env.storage().persistent().get::<_, Symbol>(&LocalOracleKey::AssetSymbol(asset.clone())) {
-            if let Some(reflector_address) = env.storage().instance().get::<_, Address>(&OracleDataKey::ReflectorAddress) {
+        if let Some(symbol) = env
+            .storage()
+            .persistent()
+            .get::<_, Symbol>(&LocalOracleKey::AssetSymbol(asset.clone()))
+        {
+            if let Some(reflector_address) = env
+                .storage()
+                .instance()
+                .get::<_, Address>(&OracleDataKey::ReflectorAddress)
+            {
                 let client = ReflectorClient::new(&env, &reflector_address);
                 if let Some(price_data) = client.lastprice(&symbol) {
-                    let max_age = env.storage().instance().get::<_, u32>(&OracleDataKey::MaxPriceAge).unwrap_or(DEFAULT_MAX_PRICE_AGE) as u64;
+                    let max_age = env
+                        .storage()
+                        .instance()
+                        .get::<_, u32>(&OracleDataKey::MaxPriceAge)
+                        .unwrap_or(DEFAULT_MAX_PRICE_AGE) as u64;
                     let current_time = env.ledger().timestamp();
-                    
+
                     // Freshness check: reject if price is older than maximum age
                     if current_time <= price_data.timestamp + max_age {
                         let decimals = client.decimals();
@@ -116,14 +123,18 @@ impl PriceOracleContract {
                             for _ in 0..diff {
                                 multiplier *= 10;
                             }
-                            price = price.checked_mul(multiplier).expect("Overflow in price normalization");
+                            price = price
+                                .checked_mul(multiplier)
+                                .expect("Overflow in price normalization");
                         } else {
                             let diff = decimals - 18;
                             let mut divisor = 1i128;
                             for _ in 0..diff {
                                 divisor *= 10;
                             }
-                            price = price.checked_div(divisor).expect("Underflow in price normalization");
+                            price = price
+                                .checked_div(divisor)
+                                .expect("Underflow in price normalization");
                         }
 
                         if price <= 0 {
@@ -131,8 +142,17 @@ impl PriceOracleContract {
                         }
 
                         // Circuit breaker check (if last known price exists)
-                        if let Some(last_price) = env.storage().persistent().get::<_, i128>(&OracleDataKey::LastPrice(asset.clone())) {
-                            let max_deviation = env.storage().instance().get::<_, u32>(&OracleDataKey::MaxPriceDeviation).unwrap_or(DEFAULT_MAX_DEVIATION_BPS) as i128;
+                        if let Some(last_price) = env
+                            .storage()
+                            .persistent()
+                            .get::<_, i128>(&OracleDataKey::LastPrice(asset.clone()))
+                        {
+                            let max_deviation = env
+                                .storage()
+                                .instance()
+                                .get::<_, u32>(&OracleDataKey::MaxPriceDeviation)
+                                .unwrap_or(DEFAULT_MAX_DEVIATION_BPS)
+                                as i128;
                             let diff = (price - last_price).abs();
                             let bps = (diff * 10000) / last_price;
                             if bps > max_deviation {
@@ -141,7 +161,9 @@ impl PriceOracleContract {
                         }
 
                         // Store normalized price as LastPrice for future circuit breaker comparison
-                        env.storage().persistent().set(&OracleDataKey::LastPrice(asset.clone()), &price);
+                        env.storage()
+                            .persistent()
+                            .set(&OracleDataKey::LastPrice(asset.clone()), &price);
                         env.storage().persistent().extend_ttl(
                             &OracleDataKey::LastPrice(asset.clone()),
                             TTL_THRESHOLD,
@@ -205,10 +227,8 @@ impl PriceOracleContract {
             TTL_EXTEND_TO,
         );
 
-        env.events().publish(
-            (symbol_short!("price"), asset),
-            price_wad,
-        );
+        env.events()
+            .publish((symbol_short!("price"), asset), price_wad);
     }
 
     /// Update the Reflector Oracle address.
@@ -239,10 +259,7 @@ impl PriceOracleContract {
 
     /// Get the admin address.
     pub fn admin(env: Env) -> Address {
-        env.storage()
-            .instance()
-            .get(&OracleDataKey::Admin)
-            .unwrap()
+        env.storage().instance().get(&OracleDataKey::Admin).unwrap()
     }
 
     /// Get the Reflector Oracle address.

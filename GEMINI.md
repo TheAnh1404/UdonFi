@@ -1,66 +1,56 @@
-# 🍜 UdonFi — Gemini Context
+# UdonFi - Gemini Context
 
-UdonFi is a high-performance, premium decentralized lending protocol built on the **Stellar Soroban** ecosystem. It features a sophisticated risk management system, optimized storage using bitmap packing, and a unique 2-step liquidation process to bypass Soroban VM CPU limits.
+UdonFi is a Stellar Soroban lending protocol. The current MVP is simplified to a contract-first demo:
 
-## 🏗️ Architecture & Project Structure
+```txt
+React Frontend -> Freighter Wallet -> Soroban RPC -> UdonFi Soroban Smart Contracts -> Stellar Testnet -> Stellar Expert
+```
 
-The project is organized as a monorepo:
+Backend, event indexer, liquidation bot, PostgreSQL event sync, analytics pipeline, queue, worker, checkpoint/replay, and sync lag strategy are Post-MVP / Future Work.
 
-- **`contracts/`**: Soroban smart contracts (Rust).
-  - `lending_pool`: Core router for supply, withdraw, borrow, and repay logic.
-  - `liquidation`: 2-step liquidation protocol (Prepare/Execute).
-  - `reserve`: Configuration for supported assets.
-  - `price_oracle`: Simulated price oracle for XLM/USDC.
-  - `a_token` & `debt_token`: Interest-bearing and debt-tracking tokens.
+## Architecture & Project Structure
+
+- `contracts/`: Soroban smart contracts in Rust.
+  - `lending_pool`: Supply, withdraw, borrow, and repay logic.
+  - `liquidation`: Manual liquidation protocol.
+  - `reserve`: Supported asset configuration.
+  - `price_oracle`: MVP price inputs / oracle components.
+  - `a_token` and `debt_token`: Interest-bearing and debt-tracking tokens where implemented.
   - `common`: Shared data structures, math, and bitmap logic.
-- **`frontend/`**: Premium Web3 interface (React + TypeScript + Vite).
-  - Uses Glassmorphism & Cyberpunk Neon aesthetics.
-  - Integrated "Simulator" mode for local in-memory blockchain testing.
-  - Communicates with Soroban RPC and the Indexer Bot.
-- **`indexer_bot/`**: Real-time event indexer (Node.js).
-  - Scans Soroban events, decodes XDR, and syncs to Firebase Firestore.
-  - Broadcasts live updates via Socket.io.
-- **`stellar-dev-skill/`**: Internal development resources and AI agent skills for Stellar.
+- `frontend/`: React + TypeScript + Vite interface.
+  - Reads directly from Soroban RPC.
+  - Writes through Freighter-signed transactions.
+  - Shows Stellar Expert links after transaction submission.
+- `backend/`, `indexer/`, and `indexer_bot/`: Post-MVP / Future Work.
+- `docs/future-work/`: Preserved plans for indexer, bot, and backend analytics.
 
-## 🛠️ Technology Stack
+## Key Commands
 
-- **Smart Contracts**: Rust, Soroban SDK (v25.0.1).
-- **Frontend**: React 19, Vite 8, TypeScript, Tailwind-alternative (Custom CSS Glassmorphism), Lucide React.
-- **Indexer & Bot**: Node.js, Stellar SDK, Socket.io, Firebase Admin.
-- **Infrastructure**: Firebase Firestore (Realtime DB), Stellar Testnet.
+### Smart Contracts
 
-## 🚀 Key Commands
+- Build: `cd contracts && cargo build --target wasm32v1-none --release`
+- Test: `cd contracts && cargo test`
+- Format/lint: `cd contracts && cargo fmt && cargo clippy --all-targets -- -D warnings`
 
-### Smart Contracts (Rust)
-- **Build**: `cd contracts && cargo build --target wasm32v1-none --release`
-- **Test**: `cd contracts && cargo test`
-- **Redeploy Entire Protocol**: `node contracts/redeploy_entire_protocol.js` (requires Soroban CLI and configured environment).
+### Frontend
 
-### Frontend (React)
-- **Install**: `cd frontend && npm install`
-- **Development**: `npm run dev`
-- **Build**: `npm run build`
+- Install: `cd frontend && npm install`
+- Development: `npm run dev`
+- Build: `npm run build`
+- Lint: `npm run lint`
 
-### Indexer Bot (Node.js)
-- **Install**: `cd indexer_bot && npm install`
-- **Run**: `npm start` (executes `run_indexer_loop.js`)
+Backend/indexer/bot commands are not required for MVP setup, tests, or demo.
 
-## 📐 Core Logic & Conventions
+## Development Guidelines
 
-- **Bitmap Packing**: User account states (collateral/borrow flags) are packed into a single `u128` bitmap to minimize Ledger storage costs.
-- **2-Step Liquidation**: Due to Soroban's 100M CPU instruction limit, liquidations are split into `prepare_liquidation` and `execute_liquidation`.
-- **Kinked Interest Rate Curve**: Uses a dual-slope model for Borrow APY, with a kink at 80% utilization.
-- **TTL Management**: Automatically extends storage TTL (Time To Live) to prevent ledger entry eviction.
-- **Auto-Reset Protocol**: The system supports an "Auto-Reset" mode that redeploys contracts after successful transactions to maintain a clean testing environment.
+- Keep smart contract edits scoped and compatible with shared types.
+- Use checked integer arithmetic and fixed-point helpers; no floating point math in contracts.
+- Keep events for debugging and Stellar Explorer visibility.
+- Frontend balances, debt, Health Factor, and liquidation state must come from Soroban RPC/on-chain state for MVP.
+- Do not add backend/indexer/bot dependencies to the MVP demo path.
 
-## 📝 Development Guidelines
+## References
 
-- **Surgical Edits**: When modifying contracts, ensure compatibility with `udonfi-common` types.
-- **UI Consistency**: Maintain the "Neon Glow" and "Glassmorphism" styling defined in `frontend/src/index.css`.
-- **State Sync**: Updates to the protocol logic must be reflected in both the `indexer_bot` (for decoding events) and the `frontend` (for simulation and display).
-- **Validation**: Always verify changes against the `SimulatorPage.tsx` or by running the local indexer/bot loop.
-
-## 🔗 Important References
-- `README.md`: Detailed protocol math and technical deep dives.
-- `DEPLOY_INSTRUCTIONS.md`: Step-by-step guide for Testnet/Mainnet deployment.
-- `mainnet_deployment_plan.md`: Roadmap and checklists for production launch.
+- `README.md`: Current MVP scope and commands.
+- `docs/02-system-architecture.md`: Current architecture.
+- `docs/future-work/`: Post-MVP indexer, bot, and analytics plans.

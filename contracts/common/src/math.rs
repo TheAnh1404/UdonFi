@@ -86,9 +86,7 @@ pub fn calculate_linear_interest(rate: i128, time_delta: u64) -> Option<i128> {
     if time_delta == 0 {
         return Some(RAY);
     }
-    let accumulated = rate
-        .checked_mul(time_delta as i128)?
-        / (SECONDS_PER_YEAR as i128);
+    let accumulated = rate.checked_mul(time_delta as i128)? / (SECONDS_PER_YEAR as i128);
     RAY.checked_add(accumulated)
 }
 
@@ -110,9 +108,7 @@ pub fn calculate_compounded_interest(rate: i128, time_delta: u64) -> Option<i128
 
     // rate_per_second = rate / SECONDS_PER_YEAR
     // exp = rate_per_second * time_delta (the exponent base)
-    let exp = rate
-        .checked_mul(time_delta as i128)?
-        / (SECONDS_PER_YEAR as i128);
+    let exp = rate.checked_mul(time_delta as i128)? / (SECONDS_PER_YEAR as i128);
 
     // Taylor expansion terms
     // term1 = exp (first order)
@@ -123,9 +119,7 @@ pub fn calculate_compounded_interest(rate: i128, time_delta: u64) -> Option<i128
     let term3 = ray_mul(exp_squared, exp)? / 6;
 
     // result = RAY + exp + term2 + term3
-    RAY.checked_add(exp)?
-        .checked_add(term2)?
-        .checked_add(term3)
+    RAY.checked_add(exp)?.checked_add(term2)?.checked_add(term3)
 }
 
 /// Calculate the utilization rate of a reserve pool.
@@ -177,9 +171,7 @@ pub fn calculate_borrow_rate(
         let remaining = WAD.checked_sub(optimal_utilization)?;
         let ratio = wad_div(excess, remaining)?;
         let steep_rate = wad_mul(ratio, slope2)?;
-        base_rate
-            .checked_add(slope1)?
-            .checked_add(steep_rate)
+        base_rate.checked_add(slope1)?.checked_add(steep_rate)
     }
 }
 

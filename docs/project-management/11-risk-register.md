@@ -1,26 +1,35 @@
 # 11 - Risk Register
 
-This document lists the technical, financial, security, project, and dependency risks identified for the UdonFi V2 protocol, mapping their probability, impact, owners, mitigation strategies, and status.
+This risk register reflects the simplified MVP. The MVP avoids backend/indexer dependencies and uses direct Soroban RPC reads plus Freighter-signed transactions.
 
 ---
 
-## Risk Analysis Matrix
+## MVP Risks
 
-| ID | Risk Description | Category | Prob. | Impact | Owner | Mitigation Strategy | Status | Review Date |
-|:---|:---|:---|:---|:---|:---|:---|:---|:---|
-| **RSK-TEC-001** | Soroban CPU Instruction limit exceeded during liquidation transactions | Technical | High | High | Lead Architect | Use a **2-step liquidation** process (`prepare` and `execute`) to distribute computational weight across multiple blocks. | Monitoring | 2026-07-15 |
-| **RSK-TEC-002** | Ledger entry eviction (TTL expiry) causes loss of user position records | Technical | Medium | High | Lead Architect | Enforce auto-renewal of TTL (Time To Live) parameters on every write and state interaction. | Mitigated | 2026-07-15 |
-| **RSK-TEC-003** | Upgradability failure during WASM hash updates corrupts contract states | Technical | Low | High | Lead Architect | Define strict schema initializations and upgrade migrations as specified in [ADR-0006](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0006-upgradeability-and-migration-strategy.md). | Mitigated | 2026-07-15 |
-| **RSK-FIN-001** | Bad debt accumulation due to delays in executing liquidations | Financial | Medium | High | Risk Engineer | Implement a buffer between the Liquidation Threshold and LTV; utilize an indexer-based liquidation bot to trigger actions instantly. | Open | 2026-07-15 |
-| **RSK-FIN-002** | Liquidity crunch due to kinked interest rate curve parameters | Financial | Low | High | Risk Engineer | Utilize a dual-slope rate model that increases borrow costs exponentially past 80% utilization to incentivize repayments. | Mitigated | 2026-07-15 |
-| **RSK-FIN-003** | Oracle price manipulation via flash loans or frontrunning | Financial | Medium | High | Lead Architect | Aggregate prices from Pyth and Band feeds, enforce deviation limit checks (<2%), and fall back to TWAP. | Mitigated | 2026-07-15 |
-| **RSK-SEC-001** | Reentrancy exploit during token withdrawals | Security | Medium | High | Auditor | Follow the Checks-Effects-Interactions pattern strictly; update user balances before performing on-chain token transfers. | Open | 2026-07-15 |
-| **RSK-SEC-002** | Administrative key compromise | Security | Low | High | PM | Deploy contracts utilizing a 3-of-5 Multi-Sig; transfer admin roles to the Governance Timelock contract. | Open | 2026-07-15 |
-| **RSK-SEC-003** | Integer overflow or underflow in interest calculation math | Security | Low | High | Auditor | Enforce checked arithmetic operators (`checked_add`, `checked_mul`) in DoD and CI lints; forbid raw math operators. | Mitigated | 2026-07-15 |
-| **RSK-PRJ-001** | Indexer sync lag displays stale position info on dashboard | Project | High | Medium | PM / Tech Lead | Implement lag middleware to mark dashboard data stale if block delay > 3, and block trades if lag > 10 blocks. | Mitigated | 2026-07-15 |
-| **RSK-PRJ-002** | Developer parallel merge conflicts in contract code | Project | Medium | Low | PM | Structure the project as a Cargo Workspace with decoupled crates (common, pool, oracle, risk). | Mitigated | 2026-07-15 |
-| **RSK-DEP-001** | Pyth/Band oracle feed outage or freeze | Dependency | Low | High | Lead Architect | Revert oracle queries and switch to secondary fallback feeds or historical TWAP prices as outlined in [ADR-0008](file:///d:/TheAnhProject/UdonFi/docs/adr/ADR-0008-oracle-failure-handling.md). | Mitigated | 2026-07-15 |
-| **RSK-DEP-002** | Stellar RPC node disconnection | Dependency | Medium | Medium | SRE Lead | Configure the Indexer and Backend API to utilize fallback RPC node clusters. | Open | 2026-07-15 |
-| **RSK-FIN-004** | Large borrows deplete pool liquidity (Run on the bank) | Financial | Medium | High | Risk Engineer | Enforce strict per-reserve borrow caps and supply caps to limit overall exposure. | Mitigated | 2026-07-15 |
-| **RSK-SEC-004** | Oracle data corruption/bad updates | Security | Low | High | Auditor | Aggregator rejects prices reporting $\le 0$ or values with a future timestamp. | Mitigated | 2026-07-15 |
-| **RSK-TEC-004** | Concurrent writes to database by indexer tasks | Technical | Medium | Medium | Lead Architect | Apply single-writer write-locks for PostgreSQL; restrict API server to read-only DB connection pools. | Mitigated | 2026-07-15 |
+| ID | Risk Description | Category | Probability | Impact | Mitigation | Status |
+|:---|:---|:---|:---|:---|:---|:---|
+| RSK-MVP-001 | Manual liquidation may be delayed because no liquidation bot is in MVP. | Financial | Medium | High | Use conservative LTV/liquidation thresholds, clear demo instructions, and user-callable liquidation. | Open |
+| RSK-MVP-002 | Frontend RPC reads may be slower than indexed reads. | UX | Medium | Medium | Batch reads where practical, show loading states, and keep Soroban RPC as source of truth. | Open |
+| RSK-MVP-003 | No real-time indexed analytics for dashboard charts. | Product | High | Low | Limit MVP dashboard to current on-chain state and local transaction history. | Accepted |
+| RSK-MVP-004 | No automated off-chain monitoring for unhealthy accounts. | Operations | High | Medium | Provide manual liquidation flow and document automated monitoring as Post-MVP. | Accepted |
+| RSK-MVP-005 | Testnet RPC instability affects demo. | Dependency | Medium | Medium | Keep retry/error messaging in frontend and document RPC endpoint configuration. | Open |
+| RSK-MVP-006 | Contract arithmetic bug could corrupt accounting. | Security | Medium | High | Use checked arithmetic, unit tests, integration tests, clippy, and security review. | Open |
+| RSK-MVP-007 | Mock/simple price input may hide oracle integration risk. | Financial | Medium | Medium | State oracle aggregation as not production-ready and limit MVP to demo assumptions. | Accepted |
+| RSK-MVP-008 | Freighter signing/network mismatch can submit to the wrong network. | UX/Security | Medium | Medium | Frontend must check network and show Testnet context before signing. | Open |
+
+---
+
+## Post-MVP Risks
+
+| ID | Risk Description | Category | Future Mitigation |
+|:---|:---|:---|:---|
+| RSK-FUT-001 | Event indexer sync lag displays stale dashboard data. | Project | Design sync lag indicators and stale-data policy before shipping indexed dashboards. |
+| RSK-FUT-002 | Concurrent database writes corrupt derived state. | Technical | Use single-writer PostgreSQL policy and idempotent event writes if indexer is revived. |
+| RSK-FUT-003 | Analytics backend is mistaken for source of truth. | Product/Security | Backend must remain derived/cached state; Soroban RPC/on-chain state remains authoritative. |
+| RSK-FUT-004 | Liquidation bot submits bad or stale transactions. | Financial | Require risk checks on-chain and monitor bot assumptions before production use. |
+
+---
+
+## Not Production-Ready
+
+The MVP is not production-ready. Missing production controls include audits, robust oracle aggregation, operational monitoring, automated liquidation monitoring, production incident response, governance hardening, and full mainnet launch procedures.

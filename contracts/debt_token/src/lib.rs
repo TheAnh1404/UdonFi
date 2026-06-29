@@ -10,9 +10,7 @@
 
 #![no_std]
 
-use soroban_sdk::{
-    contract, contractimpl, symbol_short, Address, Env, String, Symbol,
-};
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, String, Symbol};
 use udonfi_common::{LendingError, TokenDataKey, TTL_EXTEND_TO, TTL_THRESHOLD};
 
 #[contract]
@@ -109,10 +107,8 @@ impl DebtTokenContract {
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        env.events().publish(
-            (symbol_short!("mint"), to),
-            scaled_amount,
-        );
+        env.events()
+            .publish((symbol_short!("mint"), to), scaled_amount);
     }
 
     /// Burn debtTokens when a user repays. Only callable by LendingPool.
@@ -160,10 +156,8 @@ impl DebtTokenContract {
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        env.events().publish(
-            (symbol_short!("burn"), from),
-            scaled_amount,
-        );
+        env.events()
+            .publish((symbol_short!("burn"), from), scaled_amount);
     }
 
     // ── Non-Transferable ─────────────────────
@@ -225,10 +219,7 @@ impl DebtTokenContract {
 
     /// Get the associated LendingPool address.
     pub fn pool(env: Env) -> Address {
-        env.storage()
-            .instance()
-            .get(&TokenDataKey::Pool)
-            .unwrap()
+        env.storage().instance().get(&TokenDataKey::Pool).unwrap()
     }
 
     // ── Internal Helpers ─────────────────────

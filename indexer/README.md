@@ -1,5 +1,7 @@
 # UdonFi V2 Event Indexer
 
+> Post-MVP / Future Work: this indexer is not required for the MVP, not required for the demo, and not required for contract or frontend startup. The MVP frontend reads directly from Soroban RPC and writes through Freighter-signed transactions. See `docs/future-work/indexer-architecture.md`.
+
 This directory contains the event indexing engine responsible for scanning on-chain events from the Stellar network, decoding their XDR payloads, and synchronizing state to PostgreSQL.
 
 ## 1. Subsystem Responsibilities

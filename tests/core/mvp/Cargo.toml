@@ -1,0 +1,24 @@
+[package]
+name = "udonfi-mvp-core-tests"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "mod.rs"
+crate-type = ["lib"]
+
+[dependencies]
+soroban-sdk = { version = "25.0.1", features = ["testutils"] }
+udonfi-accounting = { path = "../../../contracts/core/accounting" }
+udonfi-borrow = { path = "../../../contracts/core/borrow" }
+udonfi-config-engine = { path = "../../../contracts/core/config" }
+udonfi-liquidation-core = { path = "../../../contracts/core/liquidation" }
+udonfi-pool-state = { path = "../../../contracts/core/pool" }
+udonfi-repay = { path = "../../../contracts/core/repay" }
+udonfi-reserve-registry = { path = "../../../contracts/core/reserve" }
+udonfi-risk = { path = "../../../contracts/core/risk" }
+udonfi-shared = { path = "../../../contracts/shared" }
+udonfi-supply = { path = "../../../contracts/core/supply" }
+udonfi-withdraw = { path = "../../../contracts/core/withdraw" }
+
+[workspace]

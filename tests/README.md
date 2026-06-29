@@ -1,57 +1,88 @@
 # UdonFi V2 Testing Suite Spec
 
-This directory contains the testing configurations, fuzzing harnesses, property tests, and load testing scripts for the UdonFi V2 protocol.
+The MVP test suite validates smart contract behavior and the frontend transaction path without requiring an indexer, backend, liquidation bot, PostgreSQL event sync, queue, worker, checkpoint/replay, or sync lag system.
 
-## 1. Multi-Tier Testing Framework
+---
+
+## 1. Test Architecture
 
 ```text
   +-----------------------------------------------------------+
-  |                   E2E System Tests                        |
-  |   - Cypress/Playwright integration with local Docker node |
+  |                   Frontend MVP Checks                     |
+  |   - Freighter mocks, Soroban RPC mocks, Expert link UX    |
   +-----------------------------------------------------------+
                                |
   +----------------------------v------------------------------+
-  |                   Integration Tests                       |
-  |   - Cross-contract interactions (Lending Pool + Oracle)  |
+  |                   Contract Integration Tests              |
+  |   - Initialize, reserve, deposit, borrow, repay, withdraw |
+  |   - Price shock / mock HF drop / manual liquidation       |
   +-----------------------------------------------------------+
                                |
   +----------------------------v------------------------------+
-  |                Property-Based & Fuzzing                   |
-  |   - Invariant testing for interest curves & math engines  |
+  |                Property-Based & Math Tests                |
+  |   - Accounting, interest, Health Factor, liquidation math |
   +-----------------------------------------------------------+
                                |
   +----------------------------v------------------------------+
   |                     Unit Tests (Rust)                     |
-  |   - Isolated tests for common math and bitmap packing     |
+  |   - Validation, accounting, lifecycle, events             |
   +-----------------------------------------------------------+
 ```
 
 ---
 
-## 2. Test Architectures
+## 2. Required MVP Tests
 
-### A. Unit & Integration Testing (Rust / Cargo)
-- **Files**: Located inside the `src/` or `tests/` directories of each Rust contract.
-- **Scope**: Implements mock environments, compiles contract instances, and verifies contract state transitions.
+### Contract Unit Tests
 
-### B. Property-Based Testing (`proptest`)
-- **Location**: `contracts/interest_rate_engine/tests/property_tests.rs`.
-- **Invariants**:
-  - Compounding interest calculations must be monotonic.
-  - Utilization rates must remain between 0% and 100%.
+- Deposit validation and execution.
+- Withdraw validation and execution.
+- Borrow validation and execution.
+- Repay validation and execution.
+- Basic Risk Engine and Health Factor.
+- Manual liquidation eligibility and execution.
+- Event emission for core actions.
 
-### C. Fuzz Testing (`cargo-fuzz`)
-- **Location**: `contracts/fuzz/`.
-- **Target**: Sends random inputs to transaction handlers to verify that the protocol fails gracefully without panic states.
+### Contract Integration Tests
 
-### D. Security Testing (Scribble / Static Analysis)
-- **Scope**: Runs automated static analysis tools to verify code safety and checks for reentrancy issues.
+```txt
+initialize protocol
+create reserve
+deposit
+borrow
+repay
+withdraw
+```
 
-### E. Load & Instruction Limit Testing
-- **Location**: `tests/load/`.
-- **Scope**: Simulates high-frequency transactions to measure CPU instruction consumption and memory growth on the ledger.
-- **Constraint**: Transaction execution must remain below 70 million instructions (well below the 100M limit).
+```txt
+initialize protocol
+create reserve
+deposit collateral
+borrow
+price shock / mock HF drop
+manual liquidate
+```
 
-### F. End-to-End (E2E) UI Testing (Playwright)
-- **Location**: `tests/e2e/`.
-- **Scope**: Spins up a local Stellar network using Docker, deploys the contract suite, launches the indexer bot, and verifies client flows using headless browser instances.
+### Frontend MVP Checks
+
+- Frontend reads directly from Soroban RPC.
+- Frontend writes through Freighter-signed transactions.
+- Frontend does not require backend/indexer startup.
+- Frontend shows Stellar Expert links for submitted transaction hashes.
+
+---
+
+## 3. Commands
+
+```bash
+cd contracts
+cargo test
+```
+
+```bash
+cd frontend
+npm run lint
+npm run build
+```
+
+Post-MVP backend/indexer/bot tests should be added when those systems return to scope.

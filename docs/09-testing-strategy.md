@@ -2,6 +2,8 @@
 
 UdonFi V2 implements a multi-tiered validation framework to ensure mathematical correctness, system solvency, and CPU instruction budget compliance.
 
+For the current MVP, tests must not require an event indexer, backend API, PostgreSQL event sync, liquidation bot, queue, worker, checkpoint/replay, or sync lag service.
+
 ```text
 +-------------------------------------------------------------+
 |                     E2E System Tests                        |
@@ -68,9 +70,9 @@ UdonFi V2 implements a multi-tiered validation framework to ensure mathematical 
   - The `execute_liquidation` transaction must not exceed 40 million CPU instructions.
 
 ### F. End-to-End (E2E) Testing
-- **Target**: Client interaction, wallet signing, indexer database writes, and API responses.
-- **Tools**: Playwright and local Docker networks.
-- **Setup**: Sets up a local Stellar network, builds and deploys contracts, starts the indexer, and simulates user transactions.
+- **Target**: Client interaction, Freighter wallet signing, Soroban RPC reads/writes, and Stellar Expert link rendering.
+- **Tools**: Playwright or component-level mocks where practical.
+- **Setup**: Builds/deploys contracts or uses configured Testnet contract IDs, starts the frontend, and simulates user transactions without backend/indexer services.
 
 ---
 
@@ -89,7 +91,10 @@ cargo test --package udonfi-interest-engine --test property_tests
 # Run cargo fuzzing harness
 cargo +nightly fuzz run fuzz_target_lending_pool
 
-# Run indexer service tests
-cd indexer_bot
-npm test
+# Run frontend checks
+cd ../frontend
+npm run lint
+npm run build
 ```
+
+Post-MVP backend, indexer, analytics, and bot test commands should be run only when those future-work systems are explicitly modified.

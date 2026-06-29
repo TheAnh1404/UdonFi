@@ -1,55 +1,73 @@
 # 12 - Development Roadmap & Future Vision
 
-This document details the development milestones, security auditing phases, risk factors, and the feature expansion roadmap for the UdonFi V2 protocol.
+The roadmap is refocused around a contract-first MVP demo. Indexer, bot, backend analytics, and real-time pipelines are moved to Post-MVP.
 
-## 1. Development Phases
+## 1. MVP Roadmap
 
-```text
-  Phase 1: Architecture & Specs  [CURRENT]
-  - Repository restructuring and specification design.
-  - Initial configuration template setup.
-  
-  Phase 2: Contract Engineering (Q3 2026)
-  - Coding of modular smart contracts (Rust / Soroban) including on-chain supplyCap and borrowCap checks.
-  - Implementation of u128 bitmap logic, Ray/Wad fixed-point math and 2-step liquidations.
-  - Setup of local Rust property tests.
-  
-  Phase 3: Database & Indexer Integration (Q4 2026)
-  - Setting up the PostgreSQL database schema.
-  - Building the event indexing daemon with real-time listeners and sync lag metric tracking.
-  - Integrating REST and WebSocket APIs.
-  
-  Phase 4: Testnet & Audit (Q1 2027)
-  - Deploying the protocol to Stellar Testnet.
-  - Running security audits and fuzzing campaigns.
-  - Launching the public Testnet UI with mock markets.
-  
-  Phase 5: Mainnet Launch & Governance (Q2 2027)
-  - Deploying smart contracts to Stellar Mainnet with initial safe, conservative supply and borrow caps on all reserve assets.
-  - Launching the UDON governance token and DAO.
-  - Deploying the Treasury Insurance Fund.
-```
+### Sprint 1: Core Contract Foundation
+- Pool state.
+- Reserve registry.
+- Config engine.
+- Shared accounting primitives.
+- Basic event bus.
 
----
+### Sprint 2: Accounting + Interest + Supply
+- Accounting ledger and reserve accounting.
+- Interest index helpers.
+- Supply validation and deposit execution.
+- Contract tests.
 
-## 2. Key Milestones
+### Sprint 3: Withdraw + Borrow + Repay
+- Withdraw validation/execution.
+- Borrow validation/execution.
+- Repay validation/execution.
+- State and event tests.
 
-- **Milestone 1**: Successful verification of modular contract unit tests.
-- **Milestone 2**: Indexer matches 100% of contract events without losing state over 1,000,000 test blocks.
-- **Milestone 3**: Third-party security audit completed with all findings resolved, validating cap bounds and reentrancy protections.
-- **Milestone 4**: Mainnet TVL reaches $1,000,000.
-- **Milestone 5**: Successful execution of the first community parameter update via the Governance contract, demonstrating standard timelocked cap adjustments.
+### Sprint 4: Risk + Manual Liquidation
+- Basic Health Factor.
+- Borrow/withdraw risk checks.
+- Manual liquidation eligibility and execution.
+- Close factor and liquidation bonus.
 
----
+### Sprint 5: Contract Integration Tests + Testnet Deployment
+- Full contract MVP flow tests.
+- Testnet build/deploy scripts.
+- Reserve initialization.
+- Manual demo runbook.
 
-## 3. Future Feature Expansion
+### Sprint 6: Frontend MVP + Freighter + Stellar Expert Links
+- Direct Soroban RPC reads.
+- Freighter connection and signing.
+- Deposit/withdraw/borrow/repay/manual liquidation screens.
+- Transaction status polling.
+- Stellar Expert transaction links.
 
-### A. Multi-Asset collateral Expansion
-- Support for tokenized real-world assets (RWA) and yield-bearing collateral tokens.
-- Integration of custom collateral risk coefficients to limit exposure to volatile tokens.
+## 2. MVP Completion Milestones
 
-### B. Flash Loans
-- Allow developers to borrow pool liquidity within a single transaction block, charging a 0.05% fee to depositors.
+- Contract MVP passes tests.
+- Frontend can connect Freighter on Testnet.
+- Frontend can read contract state directly from Soroban RPC.
+- Frontend can submit signed transactions.
+- Deposit, withdraw, borrow, repay, Health Factor, and manual liquidation demo works.
+- Stellar Expert links are shown after transaction submission.
 
-### C. Advanced Risk Parameters
-- Dynamic collateral caps and borrow caps per reserve to prevent the pool from accumulating too much exposure to a single asset.
+## 3. Post-MVP / Future Work
+
+- Event Indexer.
+- Liquidation Bot.
+- Backend analytics API.
+- PostgreSQL Event Sync.
+- Real-time Dashboard Pipeline.
+- Background Workers.
+- Queue/backpressure/checkpoint/replay systems.
+- Historical APY/TVL analytics.
+- Automated liquidation monitoring.
+
+## 4. Longer-Term Production Work
+
+- Security audit and remediation.
+- Oracle hardening and stale-price policy.
+- Mainnet deployment governance.
+- Operational monitoring.
+- Disaster recovery and incident runbooks.
+- Performance and load testing at production traffic levels.

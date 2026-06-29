@@ -1,115 +1,76 @@
 # 03 - C4 Model Specification
 
-This document provides a detailed layout of the UdonFi V2 system using the C4 model for software architecture.
+This C4 model reflects the current UdonFi V2 MVP. Backend, indexer, PostgreSQL, queues, workers, and bots are Post-MVP components.
 
-## 1. Level 1: System Context Diagram
-
-The System Context Diagram shows how users, liquidators, and external systems interact with the UdonFi V2 protocol.
+## 1. Level 1: System Context
 
 ```mermaid
 graph TB
-    User([Borrower / Depositor]) -->|Interacts with UI| UI[UdonFi V2 Web Client]
-    Liquidator([Liquidator]) -->|Monitors health & executes liquidations| UI
-    Liquidator -->|Queries API / DB| API[UdonFi V2 API Engine]
-    
-    UI -->|Queries & Updates| SC[UdonFi Soroban Contracts]
-    UI -->|Reads stats| API
-    
-    SC -->|Fetches Asset Prices| Oracle[Stellar Price Oracles]
-    
-    subgraph UdonFi V2 System Boundary
-        UI
-        API
-        SC
-    end
+    User([Depositor / Borrower / Manual Liquidator]) -->|Uses| UI[UdonFi React Frontend]
+    UI -->|Requests signature| Wallet[Freighter Wallet]
+    Wallet -->|Signed XDR| UI
+    UI -->|Read / simulate / submit| RPC[Soroban RPC]
+    RPC -->|Executes and reads| SC[UdonFi Soroban Contracts]
+    SC -->|State transitions and events| Testnet[Stellar Testnet]
+    UI -->|Tx hash link| Expert[Stellar Expert]
 ```
-
----
 
 ## 2. Level 2: Container Diagram
 
-The Container Diagram details the tech stack, data stores, and communication pathways.
-
 ```mermaid
 graph TB
-    User([User / Liquidator]) -->|HTTPS / WSS| Web[Vite React Client]
-    Wallet[Freighter Wallet] <-->|Sign Transactions| Web
-    
-    Web -->|JSON-RPC| RPC[Stellar Soroban RPC Node]
-    RPC <-->|Executes| Contracts[Soroban WASM Contracts]
-    
-    Web -->|JSON REST| Backend[API Service Node.js]
-    
-    Indexer[Event Indexer Node.js] -->|Polls ledger events| RPC
-    Indexer -->|Decodes XDR & Writes| DB[(PostgreSQL Database)]
-    
-    Backend -->|SQL Read / Write| DB
-    Backend -->|WebSockets Socket.io| Web
-    
-    Contracts <-->|Cross-Contract pricing| Pyth[Pyth / Band Oracle]
+    Browser[User Browser] --> Web[Vite React Client]
+    Web <--> Wallet[Freighter Extension]
+    Web --> RPC[Soroban RPC Endpoint]
+    RPC --> Contracts[Soroban WASM Contracts]
+    Contracts --> Ledger[Stellar Testnet Ledger]
+    Web --> Expert[Stellar Expert Transaction Page]
 ```
 
----
-
-## 3. Level 3: Component Diagram (Smart Contracts)
-
-This diagram outlines how the modular smart contracts interact on-chain.
+## 3. Level 3: Smart Contract Components
 
 ```mermaid
 graph TD
-    Pool[Lending Pool Router] -->|Risk evaluations| Risk[Risk Engine]
-    Pool -->|Interest rate configurations| Interest[Interest Rate Engine]
-    Pool -->|Update status| Reserve[Reserve Config]
-    
-    Liq[Liquidation Coordinator] -->|Health queries| Risk
-    Liq -->|Write updates| Pool
-    
-    Risk -->|Fetch prices| Oracle[Oracle Aggregator]
-    Risk -->|Read configurations| Reserve
-    
-    Oracle -->|Verify inputs| Feed[Stellar Oracle Feeds]
+    Frontend[Frontend via RPC] --> Pool[Pool / Flow Entrypoints]
+    Pool --> Reserve[Reserve Registry]
+    Pool --> Accounting[Accounting Engine]
+    Pool --> Interest[Interest Engine]
+    Pool --> Risk[Risk Engine]
+    Risk --> Reserve
+    Risk --> Accounting
+    Pool --> Liquidation[Manual Liquidation]
+    Liquidation --> Risk
+    Liquidation --> Accounting
 ```
 
----
-
-## 4. Level 4: Deployment Diagram
-
-This diagram displays the physical deployment infrastructure of the production protocol.
+## 4. Deployment Model for MVP
 
 ```mermaid
 graph TB
-    subgraph Client Environment
-        Browser[User Browser]
-        Freighter[Freighter Wallet Extension]
+    subgraph Client
+        Browser[Browser]
+        Freighter[Freighter Wallet]
     end
-    
-    subgraph Cloud Infrastructure (AWS / GCP)
-        LB[Load Balancer]
-        
-        subgraph ECS / Kubernetes Cluster
-            BE_Instance[API Backend Containers]
-            Idx_Instance[Indexer Bot Daemon]
-        end
-        
-        subgraph Database Tier
-            Postgres[(RDS PostgreSQL Master)]
-            Replica[(RDS PostgreSQL Read Replica)]
-            Redis[(Redis Cache Cluster)]
-        end
+
+    subgraph Stellar
+        RPC[Soroban RPC]
+        Contracts[UdonFi Contracts on Testnet]
+        Expert[Stellar Expert]
     end
-    
-    subgraph Stellar Network
-        RPC_Node[Soroban RPC Endpoint]
-        Ledger[(Stellar Ledger State)]
-    end
-    
-    Browser -->|HTTPS| LB
-    Browser -->|JSON-RPC| RPC_Node
-    LB --> BE_Instance
-    BE_Instance --> Postgres
-    BE_Instance --> Redis
-    Idx_Instance --> RPC_Node
-    Idx_Instance --> Postgres
-    Postgres -->|Replication| Replica
-    RPC_Node <--> Ledger
+
+    Browser <--> Freighter
+    Browser --> RPC
+    RPC --> Contracts
+    Browser --> Expert
 ```
+
+## 5. Post-MVP / Future Work
+
+The following containers are not MVP dependencies:
+
+- Event Indexer Node.js service.
+- PostgreSQL database.
+- Backend REST API.
+- WebSocket real-time dashboard service.
+- Liquidation bot / off-chain monitor.
+- Queue, checkpoint, replay, and analytics pipeline.

@@ -1,41 +1,55 @@
 # 08 - Code Review Checklist
 
-This checklist must be used by code reviewers when evaluating Pull Requests. Reviewers must confirm compliance in all sections before approving changes to be merged into `main`.
+Reviewers should evaluate pull requests against the current MVP architecture:
+
+```txt
+Frontend -> Freighter -> Soroban RPC -> Smart Contracts -> Stellar Testnet -> Stellar Expert
+```
 
 ---
 
-## 1. Architectural Compliance
-- [ ] Decoupling: Verify that the modular smart contract boundaries (router, oracle, risk, interest, and liquidation) remain intact.
-- [ ] Common Crate Integration: Confirm that contracts utilize shared data structures and error codes from `udonfi-common`.
-- [ ] Storage Layers: Verify that no direct raw storage reads/writes bypass defined schemas in the Common crate.
-- [ ] Database Access: Ensure the backend API does not perform database write operations; verify it only has access to read-only queries.
+## 1. Architecture
 
-## 2. Financial Correctness & Fixed-Point Math
-- [ ] Ray/Wad Precision: Confirm that all interest rates are scaled in `Ray` ($10^{27}$) and token balances in `Wad` ($10^{18}$).
-- [ ] Compounding Calculations: Check that interest is accumulated on every transaction and calculated using the correct block intervals.
-- [ ] Rounding Rules:
-  - [ ] Debt increases must round **UP** (to protect pool solvency).
-  - [ ] Supply increases must round **DOWN** (to prevent overclaims of yield).
-- [ ] Caps Enforcement: Verify that deposits respect the `supplyCap` and borrows respect the `borrowCap`.
+- [ ] Smart contract module boundaries remain intact.
+- [ ] Frontend MVP does not require backend, indexer, bot, database, queue, or worker services.
+- [ ] Contract tests do not depend on indexer events or bot simulations.
+- [ ] Events remain available for debugging and Stellar Explorer visibility.
+- [ ] Manual liquidation remains callable directly by a user/liquidator.
 
-## 3. Invariant Preservation
-- [ ] Check if the changes affect any of the 40 protocol invariants listed in [09-testing-checklist.md](file:///d:/TheAnhProject/UdonFi/docs/project-management/09-testing-checklist.md).
-- [ ] Confirm that corresponding unit, integration, or property tests exist to validate that these invariants are maintained across all states.
+---
 
-## 4. Security & Safety Gates
-- [ ] Checked Math: Verify that no raw operators (`+`, `-`, `*`, `/`) are applied to balances. Only checked methods or safe math helpers should be present.
-- [ ] Reentrancy Protection: Check that state updates occur BEFORE token transfers (following the Checks-Effects-Interactions pattern).
-- [ ] Access Control: Ensure admin, pause, and guardian parameters are restricted to correct addresses using explicit contract authorization checks.
-- [ ] Input Sanitization: Validate that user parameters (deposit amounts, borrow amounts, user address shapes) are verified.
-- [ ] Web Security (Backend/Frontend): Confirm that API parameters are sanitized to prevent injection attacks and CORS configurations are strictly restricted.
+## 2. Financial Correctness
 
-## 5. Performance & Resource Budgets
-- [ ] CPU limits: Ensure CPU instructions are optimized (budget: < 40M instructions for deposits/borrows, < 100M for liquidation execute blocks).
-- [ ] Contract Size: Confirm the optimized Wasm binary size remains under 100 KB.
-- [ ] DB Query Optimization: Review indexer queries; verify that PostgreSQL uses indices for quick lookups on user position scans.
+- [ ] Balance, supply, debt, liquidity, and interest index updates use checked arithmetic.
+- [ ] Deposits respect supply caps and lifecycle permissions.
+- [ ] Withdrawals reject insufficient balance, insufficient liquidity, and unsafe Health Factor.
+- [ ] Borrows reject insufficient liquidity, borrow-cap violations, inactive reserve state, and unsafe Health Factor.
+- [ ] Repay caps over-repay to actual debt and cannot make debt negative.
+- [ ] Liquidation rejects HF >= 1 and respects close factor, bonus, and seizure limits.
 
-## 6. Testing & Documentation Quality
-- [ ] Test Coverage: Ensure smart contract code modifications maintain $\ge 90\%$ unit test coverage.
-- [ ] Fuzz & Property Testing: Verify that new parameters or math updates are verified through `proptest` suites.
-- [ ] Code Documentation: Check that complex math curves or bit-packing operations have detailed inline documentation.
-- [ ] PR Description: Verify that the PR description matches the standard template and lists the tasks solved.
+---
+
+## 3. Security
+
+- [ ] No `unsafe` Rust is introduced.
+- [ ] No floating-point math is used in contract financial logic.
+- [ ] State updates are ordered safely around token transfers.
+- [ ] User authorization and Freighter signing assumptions are explicit.
+- [ ] Admin/guardian/lifecycle permissions are tested where changed.
+
+---
+
+## 4. Frontend MVP
+
+- [ ] Reads come from Soroban RPC.
+- [ ] Writes are Freighter-signed Soroban transactions.
+- [ ] Stellar Expert links are generated from submitted transaction hashes.
+- [ ] Any local transaction history is labeled as local UI history, not source-of-truth state.
+
+---
+
+## 5. Testing And Docs
+
+- [ ] Relevant unit and integration tests are added or updated.
+- [ ] Contract MVP tests pass without indexer/backend/bot services.
+- [ ] Docs keep indexer, bot, backend analytics, PostgreSQL event sync, real-time pipeline, workers, queues, and sync lag strategy in Post-MVP / Future Work unless the PR is explicitly future-work scoped.

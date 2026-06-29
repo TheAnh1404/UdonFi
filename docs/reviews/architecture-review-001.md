@@ -4,6 +4,8 @@
 *   **Review Board**: UdonFi V2 Software Architecture Review Board
 *   **Target Repository**: UdonFi V2 Core Protocol Specifications
 
+> Historical Review: this review predates the MVP scope refactor. PostgreSQL, event indexer, backend API, queueing, and sync lag requirements discussed below are now Post-MVP / Future Work unless restated in the current MVP docs.
+
 ---
 
 ## 1. Executive Summary

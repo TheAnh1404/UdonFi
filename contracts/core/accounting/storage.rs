@@ -1,7 +1,7 @@
 //! Persistent storage helpers for Accounting Engine state.
 
-use crate::model::{AccountingLedger, BadDebtRecord, ReserveAccounting};
-use soroban_sdk::{contracttype, Env};
+use crate::model::{AccountingLedger, BadDebtRecord, ReserveAccounting, UserAccountingSnapshot};
+use soroban_sdk::{contracttype, Address, Env};
 use udonfi_shared::ReserveId;
 
 #[contracttype]
@@ -11,6 +11,12 @@ pub enum AccountingStorageKey {
     ReserveAccounting(u32),
     AccountingVersion,
     BadDebtRecord(u32),
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UserAccountingStorageKey {
+    UserSnapshot(Address, u32),
 }
 
 pub fn has_accounting_ledger(env: &Env) -> bool {
@@ -62,5 +68,20 @@ pub fn read_bad_debt_record(env: &Env, reserve_id: ReserveId) -> Option<BadDebtR
 pub fn write_bad_debt_record(env: &Env, record: &BadDebtRecord) {
     let key = AccountingStorageKey::BadDebtRecord(record.reserve_id.0);
     env.storage().persistent().set(&key, record);
+    udonfi_shared::utils::ttl::extend_persistent_ttl(env, &key);
+}
+
+pub fn read_user_accounting_snapshot(
+    env: &Env,
+    user: &Address,
+    reserve_id: ReserveId,
+) -> Option<UserAccountingSnapshot> {
+    let key = UserAccountingStorageKey::UserSnapshot(user.clone(), reserve_id.0);
+    env.storage().persistent().get(&key)
+}
+
+pub fn write_user_accounting_snapshot(env: &Env, snapshot: &UserAccountingSnapshot) {
+    let key = UserAccountingStorageKey::UserSnapshot(snapshot.user.clone(), snapshot.reserve_id.0);
+    env.storage().persistent().set(&key, snapshot);
     udonfi_shared::utils::ttl::extend_persistent_ttl(env, &key);
 }

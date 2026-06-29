@@ -92,9 +92,7 @@ impl ATokenContract {
             .persistent()
             .get(&TokenDataKey::ScaledBalance(to.clone()))
             .unwrap_or(0);
-        let new_balance = current
-            .checked_add(scaled_amount)
-            .expect("overflow");
+        let new_balance = current.checked_add(scaled_amount).expect("overflow");
         env.storage()
             .persistent()
             .set(&TokenDataKey::ScaledBalance(to.clone()), &new_balance);
@@ -119,10 +117,8 @@ impl ATokenContract {
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
         // Emit mint event
-        env.events().publish(
-            (symbol_short!("mint"), to),
-            scaled_amount,
-        );
+        env.events()
+            .publish((symbol_short!("mint"), to), scaled_amount);
     }
 
     /// Burn aTokens from a user. Only callable by the LendingPool.
@@ -171,10 +167,8 @@ impl ATokenContract {
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        env.events().publish(
-            (symbol_short!("burn"), from),
-            scaled_amount,
-        );
+        env.events()
+            .publish((symbol_short!("burn"), from), scaled_amount);
     }
 
     // ── SEP-41 Compatible Interface ──────────
@@ -229,10 +223,7 @@ impl ATokenContract {
 
     /// Get the associated LendingPool address.
     pub fn pool(env: Env) -> Address {
-        env.storage()
-            .instance()
-            .get(&TokenDataKey::Pool)
-            .unwrap()
+        env.storage().instance().get(&TokenDataKey::Pool).unwrap()
     }
 
     // ── Internal Helpers ─────────────────────

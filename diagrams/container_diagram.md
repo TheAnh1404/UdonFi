@@ -1,22 +1,16 @@
 # Container Diagram
 
-This diagram outlines the major runtime containers, technical stacks, databases, and communication protocols.
+This diagram outlines the current MVP runtime containers. Post-MVP services are intentionally excluded from the required demo path.
 
 ```mermaid
 graph TB
-    User([User / Liquidator]) -->|HTTPS / WSS| Web[Vite React Client]
-    Wallet[Freighter Wallet] <-->|Sign Transactions| Web
-    
-    Web -->|JSON-RPC| RPC[Stellar Soroban RPC Node]
-    RPC <-->|Executes| Contracts[Soroban WASM Contracts]
-    
-    Web -->|JSON REST| Backend[API Service Node.js]
-    
-    Indexer[Event Indexer Node.js] -->|Polls ledger events| RPC
-    Indexer -->|Decodes XDR & Writes| DB[(PostgreSQL Database)]
-    
-    Backend -->|SQL Read / Write| DB
-    Backend -->|WebSockets Socket.io| Web
-    
-    Contracts <-->|Cross-Contract pricing| Pyth[Pyth / Band Oracle]
+    User([User / Liquidator]) -->|HTTPS| Web[Vite React Client]
+    User -->|Approves signatures| Wallet[Freighter Wallet]
+    Web -->|Request signature| Wallet
+    Web -->|JSON-RPC reads and transaction submission| RPC[Stellar Soroban RPC]
+    RPC -->|Invokes / queries| Contracts[UdonFi Soroban WASM Contracts]
+    Contracts -->|State changes and events| Ledger[Stellar Testnet Ledger]
+    Web -->|Transaction hash URL| Expert[Stellar Expert]
 ```
+
+Post-MVP containers may later include event indexer, analytics backend, PostgreSQL, Redis, queues, workers, and automated liquidation monitoring.

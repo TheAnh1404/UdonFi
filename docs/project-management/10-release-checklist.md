@@ -1,98 +1,103 @@
 # 10 - Release Checklist
 
-This document details the step-by-step release checklist for staging/testnet environments and outlines the production mainnet launch sequence.
+This checklist is for the UdonFi V2 MVP demo on Stellar Testnet. It is not a production or mainnet launch checklist.
 
-> [!WARNING]
-> **MAINNET LAUNCH NOT APPROVED**: UdonFi V2 is currently in "APPROVED TO PREPARE IMPLEMENTATION PLAN" status. Code implementation and mainnet deployment are **not approved** until a formal financial design, threat model audit, and security sign-off are completed.
+> Mainnet launch is not approved. UdonFi V2 requires completed implementation, audits, threat modeling, governance decisions, and operational readiness before any production claim.
 
 ---
 
-## 1. Staging / Testnet Deployment Validation
+## 1. MVP Pre-Release Checks
 
-Staging releases serve to verify contract interactions, event processing, database updates, and dashboard rendering on the Stellar Testnet.
+- [ ] Contract MVP supports deposit, withdraw, borrow, repay, basic Health Factor, and manual liquidation.
+- [ ] Contract unit tests pass.
+- [ ] Contract integration tests pass for lifecycle and liquidation flows.
+- [ ] Rust formatting passes.
+- [ ] Rust clippy passes.
+- [ ] Frontend builds and runs without backend/indexer services.
+- [ ] Frontend reads state directly from Soroban RPC.
+- [ ] Frontend writes transactions through Freighter.
+- [ ] Frontend shows Stellar Expert links after transaction submission.
 
-### A. Pre-Deployment Check
-- [ ] Confirm all tasks in the active sprint are marked "Done" according to the Definition of Done.
-- [ ] Verify that all 40 protocol invariants pass automated testing in CI.
-- [ ] Compile smart contracts with optimization:
+---
+
+## 2. Contract Build
+
+```bash
+cd contracts
+cargo build --target wasm32v1-none --release
+```
+
+- [ ] Release Wasm files are generated.
+- [ ] Contract size and CPU expectations are checked against MVP budgets.
+- [ ] Deployment artifacts are recorded.
+
+---
+
+## 3. Testnet Deployment
+
+- [ ] Deploy UdonFi Soroban contracts to Stellar Testnet.
+- [ ] Initialize protocol configuration.
+- [ ] Create reserves for demo assets.
+- [ ] Configure supply caps, borrow caps, LTV, liquidation threshold, close factor, and liquidation bonus.
+- [ ] Configure mock/simple price inputs or oracle addresses used by the MVP.
+- [ ] Record contract IDs.
+- [ ] Record Soroban RPC URL.
+- [ ] Record Stellar Expert Testnet URL pattern.
+
+---
+
+## 4. Frontend Demo Setup
+
+- [ ] Configure frontend with Testnet contract IDs.
+- [ ] Configure frontend with Soroban RPC URL.
+- [ ] Confirm Freighter is set to Stellar Testnet.
+- [ ] Start frontend:
   ```bash
-  cd contracts
-  cargo build --target wasm32v1-none --release
+  cd frontend
+  npm run dev
   ```
-- [ ] Ensure compiled WASM files are optimized and sizes are verified (<100 KB).
-
-### B. On-Chain Deployment & Initialization
-- [ ] Deploy WASM contracts to Stellar Testnet:
-  - [ ] Deploy `udonfi_common` (libraries)
-  - [ ] Deploy `lending_pool`
-  - [ ] Deploy `price_oracle`
-  - [ ] Deploy `risk_engine`
-  - [ ] Deploy `interest_rate_engine`
-  - [ ] Deploy `liquidation_coordinator`
-- [ ] Initialize pool contracts with deployed Contract IDs:
-  - [ ] Register supported asset reserves (XLM, USDC).
-  - [ ] Set supply and borrow caps per reserve.
-  - [ ] Configure risk parameters: Max LTV, Liquidation Threshold, Close Factor.
-  - [ ] Link interest rate curves.
-  - [ ] Initialize oracle pricing feeds.
-
-### C. Off-Chain Infrastructure Setup
-- [ ] Spin up Staging PostgreSQL and Redis instances.
-- [ ] Deploy the Event Indexer, passing the contract deploy block height as start parameters:
-  ```bash
-  cd indexer_bot
-  START_BLOCK=4920813 npm start
-  ```
-- [ ] Verify event indexer decodes events sequentially and writes user positions without lag.
-- [ ] Deploy the REST API Backend connected to the read-only DB pool.
-- [ ] Deploy the Frontend Client Dashboard connected to the Staging API.
-
-### D. Manual Staging Verification
-- [ ] Connect Freighter Wallet on testnet.
-- [ ] Execute `supply` transaction and verify `aTokens` are received and supply balances display.
-- [ ] Execute `borrow` transaction and verify `debtTokens` are received and borrow limits update.
-- [ ] Trigger an artificial price drop in the testnet mock oracle feed to verify that a borrower's Health Factor drops below 1.0.
-- [ ] Execute a manual `prepare` and `execute` liquidation run.
+- [ ] Confirm no backend/indexer service is required for startup.
 
 ---
 
-## 2. Production / Mainnet Launch Sequence (Gated)
+## 5. Manual Demo Flow
 
-> [!IMPORTANT]
-> This phase requires formal governance sign-off, multi-sig key setup, and smart contract audit certification.
-
-### Phase 1: Security Audit & Multi-Sig Setup
-- [ ] Complete external third-party security audits.
-- [ ] Resolve all audit findings.
-- [ ] Establish Multi-Sig Admin keys (minimum 3-of-5 key scheme).
-- [ ] Establish Guardian keys (minimum 2-of-3 scheme) for emergency pause triggers.
-
-### Phase 2: Mainnet Smart Contract Deployment
-- [ ] Build release WASM binaries and check checksums.
-- [ ] Multi-sig executes deployment of core contracts to Stellar Mainnet.
-- [ ] Set initialization variables:
-  - [ ] Enforce conservative initial caps (e.g., $100k limit per reserve).
-  - [ ] Configure LTV ratios ($LTV_{max} < LT$).
-  - [ ] Set the timelock gating policy to at least 24 hours.
-
-### Phase 3: Infrastructure & Oracle Bindings
-- [ ] Link primary production oracle feeds (Pyth/Band) and test the TWAP fallback.
-- [ ] Start production Indexer service (using single-writer PostgreSQL writes).
-- [ ] Start production API Backend (using read-only DB connections).
-- [ ] Launch Frontend client site.
-
-### Phase 4: Control Transition (Decentralization)
-- [ ] Multi-sig transfers contract ownership and upgrade authority to the Governance Timelock contract.
-- [ ] Verify that admin credentials have been revoked.
-- [ ] Confirm emergency pause guardian roles are bound.
+- [ ] Connect Freighter Wallet on Testnet.
+- [ ] Initialize or select demo reserve.
+- [ ] Deposit.
+- [ ] Borrow.
+- [ ] Repay partial amount.
+- [ ] Withdraw allowed amount.
+- [ ] Create or simulate Health Factor drop with approved testnet/mock price flow.
+- [ ] Execute manual liquidation from a liquidator account.
+- [ ] Open Stellar Expert links for submitted transactions.
+- [ ] Confirm contract events are visible for debugging.
 
 ---
 
-## 3. Emergency Rollback & Recovery Procedure
+## 6. Explicitly Out Of MVP Release
 
-If a critical bug or vulnerability is identified during release or live operations:
-1. **Immediate Pause**: The Guardian multi-sig calls `pause()` on the lending pool. This freezes supply, withdraw, borrow, repay, and liquidation actions immediately (bypassing timelocks).
-2. **Analysis**: Assess the bug using database event logs and transaction XDR traces.
-3. **Upgrade Proposal**: Submit a contract upgrade proposal containing the bug fix WASM code.
-4. **Execution**: Execute the upgrade proposal via governance timelock (after the mandatory 24-hour delay).
-5. **Resume**: The admin calls `unpause()` to resume normal protocol operations.
+- Event Indexer deployment.
+- Liquidation Bot deployment.
+- Analytics Backend deployment.
+- PostgreSQL event sync.
+- Real-time dashboard pipeline.
+- Background workers.
+- Queue system.
+- Sync lag middleware.
+- Checkpoint/replay pipeline.
+
+These are tracked under [Future Work](../future-work/).
+
+---
+
+## 7. Post-MVP Production Readiness Work
+
+Before production/mainnet, the project still needs:
+
+- External security audit.
+- Operational monitoring and incident response.
+- Oracle failure-mode hardening.
+- Governance and admin key policy.
+- Backend/indexer/bot architecture review if those systems are revived.
+- Full production launch checklist.

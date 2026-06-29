@@ -2,6 +2,8 @@
 
 This document details the resolutions for all findings identified in `docs/reviews/architecture-review-001.md`.
 
+> Historical Resolution: CR-003 and related backend/indexer work are now Post-MVP / Future Work after the MVP scope refactor. The current MVP uses direct Soroban RPC reads and Freighter-signed transactions.
+
 ---
 
 ## CR-001: Lack of supply and borrow caps per reserve
@@ -41,7 +43,7 @@ This document details the resolutions for all findings identified in `docs/revie
 
 ## CR-003: Missing sync lag strategy for API dashboards when the event indexer is delayed
 
-*   **Status**: Resolved
+*   **Status**: Moved to Post-MVP / Future Work
 *   **Resolution**:
     *   Defined the database single-writer rule: only the Event Indexer bot writes ledger state, while the API is read-only, preventing locks.
     *   Implemented REST response metadata (`meta` containing `latestProcessedLedger`, `networkLedger`, `syncLag`, and `isStale`).

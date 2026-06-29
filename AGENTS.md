@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-UdonFi is a monorepo for a Stellar Soroban lending protocol. Smart contracts live in `contracts/` as a Rust workspace: shared primitives are in `contracts/shared/` and `contracts/common/`; protocol crates include `lending_pool`, `reserve`, `price_oracle`, `liquidation`, `a_token`, and `debt_token`. The React client is in `frontend/`, with components in `frontend/src/components/` and assets in `frontend/src/assets/` plus `frontend/public/`. The indexer bot is in `indexer_bot/`. Specs, ADRs, and process docs are in `docs/`; diagrams are in `diagrams/`; tests docs are under `tests/`.
+UdonFi is a monorepo for a Stellar Soroban lending protocol. The current MVP is contract-first: React Frontend, Freighter Wallet, Soroban RPC, UdonFi Soroban Smart Contracts, Stellar Testnet, and Stellar Expert transaction links. Smart contracts live in `contracts/` as a Rust workspace: shared primitives are in `contracts/shared/` and `contracts/common/`; protocol crates include `lending_pool`, `reserve`, `price_oracle`, `liquidation`, `a_token`, and `debt_token`. The React client is in `frontend/`, with components in `frontend/src/components/` and assets in `frontend/src/assets/` plus `frontend/public/`. Backend/indexer/bot work is Post-MVP / Future Work and must not be required for the MVP demo. Specs, ADRs, and process docs are in `docs/`; diagrams are in `diagrams/`; tests docs are under `tests/`.
 
 ## Build, Test, and Development Commands
 
@@ -11,7 +11,7 @@ UdonFi is a monorepo for a Stellar Soroban lending protocol. Smart contracts liv
 - `cd contracts && cargo fmt && cargo clippy --all-targets -- -D warnings`: format and lint Rust.
 - `cd frontend && npm install && npm run dev`: install dependencies and start Vite.
 - `cd frontend && npm run build && npm run lint`: type-check/build and lint React code.
-- `cd indexer_bot && npm install && npm start`: start the realtime indexer loop.
+- Backend/indexer/bot commands are Post-MVP only and are not required for MVP setup or demo.
 
 The root `package.json` has no scripts; run commands inside subprojects.
 
@@ -23,7 +23,7 @@ Frontend code uses TypeScript React functional components. Component files use `
 
 ## Testing Guidelines
 
-Place Rust tests next to contract code or in crate-level `tests/` directories. Name tests by behavior, for example `test_supply_and_withdraw`. Keep snapshots under each crate's `test_snapshots/`. For UI changes, run lint/build and add Playwright or Cypress coverage for wallet, indexer, or full-flow changes.
+Place Rust tests next to contract code or in crate-level `tests/` directories. Name tests by behavior, for example `test_supply_and_withdraw`. Keep snapshots under each crate's `test_snapshots/`. For UI changes, run lint/build and add Playwright or Cypress coverage for wallet, Soroban RPC, Stellar Expert links, or full-flow changes.
 
 ## Commit & Pull Request Guidelines
 
@@ -33,4 +33,4 @@ Pull requests should include a description, linked issue or task ID, verificatio
 
 ## Security & Configuration Tips
 
-Use `.env.example` for local configuration and never commit secrets, private keys, or production Firebase credentials. Treat contract, liquidation, oracle, and indexer changes as security-sensitive: document assumptions and stale-data handling.
+Use `.env.example` for local configuration and never commit secrets, private keys, or production credentials. Treat contract, liquidation, oracle, wallet, and Post-MVP indexer/backend changes as security-sensitive: document assumptions and source-of-truth handling.

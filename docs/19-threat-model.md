@@ -2,6 +2,8 @@
 
 This document details the threat landscape modeling using the STRIDE framework, trust boundaries, key management, and incident response procedures for UdonFi V2.
 
+MVP scope is contract-first: React Frontend, Freighter Wallet, Soroban RPC, UdonFi Soroban Smart Contracts, Stellar Testnet, and Stellar Expert transaction links. Backend API, event indexer, PostgreSQL analytics, real-time pipeline, queues, workers, and automated liquidation bot are Post-MVP / Future Work.
+
 ---
 
 ## 1. Assets to Protect
@@ -11,32 +13,30 @@ This document details the threat landscape modeling using the STRIDE framework, 
 - **Oracle Prices**: Price feed valuations used by the risk engine.
 - **Governance Authority**: Administrative capabilities (contract upgrades, risk parameter updates).
 - **Admin/Guardian Keys**: Cryptographic key pairs for the governance multisig and emergency pause roles.
-- **Indexed Data**: History and user stats stored in the PostgreSQL database.
-- **API & Frontend Integrity**: Web interface code and API servers.
+- **Frontend Integrity**: Web interface code, wallet connection, RPC configuration, and transaction link rendering.
+- **Post-MVP Indexed Data**: History and user stats stored in a database only if the Post-MVP indexer/backend returns to scope.
 
 ---
 
 ## 2. Trust Boundaries
 
 ```text
-  +------------------+     +-------------------+     +------------------+
-  |   User Browser   |     |    Backend API    |     |   Indexer Bot    |
-  |  - Wallet Sig    | <-> |  - Read-Only DB   | <-> |  - PostgreSQL DB |
-  +--------+---------+     +---------+---------+     +--------+---------+
-           |                         |                        |
-           +---------- JSON-RPC -----+------- RPC Event Poll -+
-                                     |
-                                     v
-                           +-------------------+
-                           | Stellar Soroban   |
-                           | Smart Contracts   |
-                           +-------------------+
+  +------------------+      +------------------+      +-------------------+
+  |   User Browser   | <--> | Freighter Wallet | ---> |   Soroban RPC     |
+  |  React Frontend  |      | User Signature   |      | Testnet Endpoint  |
+  +--------+---------+      +------------------+      +---------+---------+
+           |                                                |
+           | Stellar Expert links                           v
+           v                                      +-------------------+
+  +------------------+                            | UdonFi Soroban    |
+  | Stellar Expert   |                            | Smart Contracts   |
+  +------------------+                            +-------------------+
 ```
 
 - **Boundary 1 (User to Web UI)**: Web UI runs in the user's browser, communicating with Freighter Wallet.
-- **Boundary 2 (Web UI to Backend API)**: Backend API retrieves data from PostgreSQL. The API backend has **read-only** database access to ledger state tables.
-- **Boundary 3 (Event Indexer to PostgreSQL)**: Indexer polls RPC events, decodes XDR, and holds **write-only** access to PostgreSQL.
-- **Boundary 4 (Smart Contracts to Oracles)**: Oracle providers push price data to the blockchain, where the aggregator verifies it.
+- **Boundary 2 (Web UI to Soroban RPC)**: Frontend reads contract state and submits signed transactions through Soroban RPC.
+- **Boundary 3 (Smart Contracts to Oracles/Price Inputs)**: MVP uses configured price inputs or available oracle components; production oracle aggregation is not complete.
+- **Post-MVP Boundary**: Backend API, indexer, and PostgreSQL trust boundaries are future work.
 
 ---
 
@@ -78,7 +78,8 @@ This document details the threat landscape modeling using the STRIDE framework, 
 ```
 
 ### 1. Detection
-- Real-time monitors flag anomalies (e.g. Health Factors dropping below 1.0 without liquidations, or pool assets falling below liabilities).
+- MVP detection is manual: developers and demo operators review Stellar Expert transactions, contract events, and direct Soroban RPC state.
+- Automated off-chain monitors are Post-MVP.
 
 ### 2. Triage & Verify
 - The engineering team reviews transaction traces and verify the vulnerability.

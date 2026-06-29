@@ -1,124 +1,98 @@
 # 12 - Developer Onboarding Guide
 
-Welcome to the UdonFi V2 engineering team! This guide will help you set up your local development environment, run the testing suites, and understand the workflow guidelines in your first day.
+This guide gets developers running the UdonFi V2 MVP path. The MVP does not require backend, indexer, PostgreSQL, Redis, queues, workers, or liquidation bot services.
 
 ---
 
-## 1. Repository Layout & Architecture Overview
+## 1. Repository Layout
 
-The project is structured as a monorepo containing:
-- `/contracts/`: Core smart contracts (Rust & Soroban SDK).
-- `/indexer_bot/`: Node.js daemon that indexes events into PostgreSQL.
-- `/backend/`: Fastify/Express Node.js REST and WebSocket API server.
-- `/frontend/`: React + Vite client dashboard.
-- `/docs/`: Specifications, architecture schemas, and project management guidelines.
+- `/contracts/`: Soroban smart contracts and contract tests.
+- `/frontend/`: React + Vite MVP client using Freighter and Soroban RPC.
+- `/backend/`: Optional Post-MVP backend analytics/caching plan.
+- `/indexer/` and `/indexer_bot/`: Optional Post-MVP event indexer and bot work.
+- `/docs/`: Specifications, architecture docs, and project-management docs.
+- `/docs/future-work/`: Preserved plans for indexer, bot, and backend analytics.
 
-Before writing code, please review:
-1. [02-system-architecture.md](file:///d:/TheAnhProject/UdonFi/docs/02-system-architecture.md) (C4 models).
-2. [05-smart-contract-spec.md](file:///d:/TheAnhProject/UdonFi/docs/05-smart-contract-spec.md) (contract storage and entrypoints).
-3. [15-protocol-invariants.md](file:///d:/TheAnhProject/UdonFi/docs/15-protocol-invariants.md) (core safety rules).
+Before writing code, review:
+
+1. [System Architecture](../02-system-architecture.md)
+2. [Smart Contract Spec](../05-smart-contract-spec.md)
+3. [Protocol Invariants](../15-protocol-invariants.md)
+4. [MVP Scope Refactor Report](../reviews/mvp-scope-refactor-report.md)
 
 ---
 
-## 2. Local Environment Setup
+## 2. Required Local Tools
 
-Ensure you have the following installed on your machine:
-- **Rust**: Version 1.78+ (via rustup).
-- **Node.js**: Version 18+ (LTS).
-- **Docker & Docker-Compose**: For spinning up databases locally.
-- **Soroban CLI**: Version 20+ (for contract compilation and sandbox testing).
+- Rust via rustup.
+- Soroban CLI / Stellar CLI compatible with the contract toolchain.
+- Node.js for the React frontend.
+- Freighter Wallet extension for browser demo testing.
 
-### Step A: Spin Up Local Databases
-Start PostgreSQL and Redis containers using docker-compose:
-```bash
-docker-compose up -d
-```
-*Verify*: Run `docker ps` to ensure ports `5432` and `6379` are bound.
+Docker/PostgreSQL/Redis are not required for the MVP demo path.
 
-### Step B: Compile Smart Contracts
-Compile Rust contracts to optimized WASM binaries:
+---
+
+## 3. Contract Workflow
+
+Build contracts:
+
 ```bash
 cd contracts
 cargo build --target wasm32v1-none --release
 ```
-*Verify*: Check that `.wasm` files exist in `target/wasm32v1-none/release/`.
 
-### Step C: Install Off-chain Dependencies
-Install package dependencies for the indexer, backend API, and frontend client:
-```bash
-# Install Indexer dependencies
-cd ../indexer_bot && npm install
+Run tests:
 
-# Install Backend API dependencies
-cd ../backend && npm install
-
-# Install Frontend Client dependencies
-cd ../frontend && npm install
-```
-
----
-
-## 3. Running Tests & Linters
-
-### Rust Contracts
-Run unit and integration tests:
 ```bash
 cd contracts
 cargo test
 ```
-Run Clippy linter to verify code safety:
+
+Run format and lint checks:
+
 ```bash
+cd contracts
+cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-### Backend API
-Run backend checks:
-```bash
-cd backend
-npm run lint
-npm run test
-```
+---
 
-### Frontend Client
-Run frontend checks:
+## 4. Frontend Workflow
+
+Install and start the frontend:
+
 ```bash
 cd frontend
-npm run lint
-npm run test
+npm install
+npm run dev
 ```
 
----
+The frontend MVP must:
 
-## 4. Local Execution Workflow
-
-To run UdonFi V2 in your local sandbox:
-
-1. **Deploy Contracts**: Run the deploy script to initialize the Soroban local node, deploy WASM files, and update local contract configurations:
-   ```bash
-   cd scripts
-   node deploy_contracts.js
-   ```
-2. **Start the Indexer**: The indexer starts polling blocks from the local node and syncs events to PostgreSQL:
-   ```bash
-   cd indexer_bot
-   npm start
-   ```
-3. **Start the Backend API**: Launches the REST and WebSocket dashboard server:
-   ```bash
-   cd backend
-   npm run dev
-   ```
-4. **Start the Frontend Client**: Launches the React client dashboard on `http://localhost:5173`:
-   ```bash
-   cd frontend
-   npm run dev
-   ```
+- Read contract state directly from Soroban RPC.
+- Write through Freighter-signed transactions.
+- Show Stellar Expert links after transaction submission.
+- Run without backend/indexer services.
 
 ---
 
-## 5. Development Workflow Guidelines
+## 5. MVP Demo Workflow
 
-- **Branch Naming**: Match branches to Task IDs: `feature/SUP-001-core-supply` or `fix/INT-002-rounding`.
-- **Commit Messages**: Follow Conventional Commits: `feat(contracts): add supply cap validation`.
-- **Definition of Done (DoD)**: Review [05-definition-of-done.md](file:///d:/TheAnhProject/UdonFi/docs/project-management/05-definition-of-done.md) before opening a PR.
-- **Definition of Ready (DoR)**: Review [06-definition-of-ready.md](file:///d:/TheAnhProject/UdonFi/docs/project-management/06-definition-of-ready.md) before picking a task from the backlog.
+1. Deploy and initialize contracts on Stellar Testnet.
+2. Configure frontend contract IDs and Soroban RPC URL.
+3. Connect Freighter on Testnet.
+4. Deposit.
+5. Borrow.
+6. Repay.
+7. Withdraw.
+8. Trigger a mock/testnet price shock or use an unhealthy test account.
+9. Execute manual liquidation.
+10. Open Stellar Expert transaction links.
+
+---
+
+## 6. Post-MVP Services
+
+Backend, indexer, analytics, PostgreSQL event sync, real-time dashboard sync, sync lag strategy, background workers, queues, checkpoint/replay, and automated liquidation monitoring are future work. They are not required for MVP setup, tests, or demo.

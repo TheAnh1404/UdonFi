@@ -2,6 +2,18 @@
 
 This document specifies the functional capabilities, mathematical constraints, and non-functional parameters governing the UdonFi V2 protocol.
 
+## Current MVP Scope
+
+The current MVP is a contract-first demo using:
+
+```txt
+Frontend -> Freighter -> Soroban RPC -> Smart Contracts -> Stellar Testnet -> Stellar Expert
+```
+
+The MVP includes deposit, withdraw, borrow, repay, basic Health Factor, manual liquidation, direct Soroban RPC reads, Freighter-signed writes, and Stellar Expert transaction links.
+
+Event indexer, liquidation bot, backend analytics, PostgreSQL event sync, real-time dashboard pipeline, background workers, queues, checkpoint/replay, sync lag strategy, advanced governance, and production oracle aggregation are Post-MVP / Future Work.
+
 ## 1. Functional Specifications
 
 ### A. Supply & Withdraw (Depositors)
@@ -20,6 +32,8 @@ This document specifies the functional capabilities, mathematical constraints, a
 - **Execute Liquidation**: The liquidator repays the debt through the coordinator and seizes the collateral, plus a liquidation bonus, within the lock window.
 
 ### D. Governance
+Post-MVP / Future Work for the demo. The MVP may use admin/testnet configuration only where required to initialize reserves.
+
 - **Proposals**: Stakers of the governance token can submit structural proposals.
 - **Voting**: Token holders can vote on proposals after a fixed delay.
 - **Execution**: Approved proposals are queued in a timelock before execution.
@@ -77,9 +91,11 @@ To prevent over-exposure to specific assets and mitigate systemic threat runs (s
 - **State Compression**: Vault collateral and borrow statuses must fit into a single `u128` bitmap, keeping storage write costs low.
 - **Gas Bound**: No transaction should consume more than 70 million CPU instructions (leaving a safety margin below the 100M limit).
 
-### B. Scalability & Event Sync
-- **Sub-second updates**: The indexer must decode event XDR objects and write them to PostgreSQL within 1 second of ledger commitment.
-- **WebSocket Latency**: Pushed notifications must reach frontend client subscribers within 500ms of database entry.
+### B. MVP Frontend Read Path
+- **Direct reads**: The frontend reads current protocol state directly from Soroban RPC.
+- **Direct writes**: The frontend submits Freighter-signed Soroban transactions.
+- **Explorer visibility**: The frontend links submitted transactions to Stellar Expert.
+- **Post-MVP event sync**: Sub-second indexer updates, PostgreSQL writes, WebSocket latency budgets, and real-time analytics are future work.
 
 ### C. Security & Solvency
 - **Multi-Oracle Consensus**: Asset pricing requires multiple independent price feeds. Deviation between feeds must be less than 2% to execute updates.

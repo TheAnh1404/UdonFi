@@ -2,6 +2,8 @@
 
 This document catalogs the potential failure modes of the UdonFi V2 protocol across technical, mathematical, economic, and administrative domains, detailing detection mechanisms and recovery procedures.
 
+For the current MVP, backend, indexer, PostgreSQL event sync, liquidation bot, queues, workers, checkpoint/replay, and sync lag systems are Post-MVP / Future Work. Sections covering those systems are retained as future failure analysis, not MVP dependencies.
+
 ---
 
 ## 1. Smart Contract Failures (FMA-CON-01 to FMA-CON-07)
@@ -116,7 +118,9 @@ This document catalogs the potential failure modes of the UdonFi V2 protocol acr
 
 ---
 
-## 3. Indexer Failures (FMA-IDX-01 to FMA-IDX-06)
+## 3. Post-MVP Indexer Failures (FMA-IDX-01 to FMA-IDX-06)
+
+These failure modes apply only if the event indexer returns to scope after the contract and frontend MVP are stable.
 
 ### FMA-IDX-01: Sync Lag Behind Ledger Tip
 - **Description**: The event indexer falls behind the actual network tip.
@@ -168,7 +172,9 @@ This document catalogs the potential failure modes of the UdonFi V2 protocol acr
 
 ---
 
-## 4. Backend/API Failures (FMA-API-01 to FMA-API-05)
+## 4. Post-MVP Backend/API Failures (FMA-API-01 to FMA-API-05)
+
+These failure modes apply only if the analytics backend or API layer returns to scope after the MVP.
 
 ### FMA-API-01: API Serving Stale Data as Fresh
 - **Description**: Backend serves stale cached data without metadata flags.

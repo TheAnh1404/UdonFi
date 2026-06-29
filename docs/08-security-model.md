@@ -1,74 +1,57 @@
 # 08 - Security Model & Threat Assessment
 
-DeFi lending protocols are prime targets for exploits. This document outlines UdonFi V2's security model, threat landscape modeling, access control designs, and mitigation strategies.
+This security model reflects the simplified MVP scope: smart contracts, frontend, Freighter, Soroban RPC, Stellar Testnet, and Stellar Expert transaction links.
 
-## 1. Threat Modeling (STRIDE Framework)
+## 1. MVP Trust Boundaries
 
-| Category | Threat Description | Protocol Mitigation Strategy |
+| Boundary | Trust Assumption | MVP Control |
 |---|---|---|
-| **Spoofing** | Unauthorized entity signing transactions as a borrower or depositor. | Enforce cryptographic signature verification inside Soroban SDK via native Freighter wallet bindings. |
-| **Tampering** | Manipulation of price feed data during transaction execution. | Decentralized Oracle Aggregator combining Pyth, Band, and median calculations with sanity deviation checks (<2%). |
-| **Repudiation** | Denying participation in debt liquidations or voting proposals. | Immutable event logging for all key state transitions. On-chain receipt generation. |
-| **Information Disclosure** | Front-running pending liquidations or borrows in Stellar transaction pools. | Flash-loan checks and 2-step liquidation flows. Secure preparation signatures. |
-| **Denial of Service** | Eviction of ledger configurations by letting TTL expire. | Automatic `extend_ttl` executions on all user write operations. |
-| **Elevation of Privilege** | Exploiting upgrade functions to extract treasury funds. | Gating administrative operations behind multi-sig controls and a 48-hour timelock. |
+| User -> Frontend | UI can be wrong or stale. | Simulate before signing; show transaction details and Stellar Expert links. |
+| Frontend -> Freighter | Wallet protects private keys. | User approval required for every transaction. |
+| Frontend -> Soroban RPC | RPC may be slow or unavailable. | Retry/read fallback can be added; no backend cache is authoritative. |
+| Soroban RPC -> Contracts | Contracts enforce all critical state transitions. | Contract validation for caps, liquidity, balances, HF, and liquidation eligibility. |
+| Contracts -> Events | Events are for observability. | Events are not required as state source for MVP. |
 
----
+## 2. Critical MVP Risks and Mitigations
 
-## 2. Risk Matrix & Vulnerability Analysis
+1. **Invalid signatures or spoofed users**
+   - Mitigation: Freighter signs transactions for the active Stellar account; contracts validate authorization where required.
 
-```text
-  Severity / Probability Matrix:
-  
-  High     | [Oracle Manipulation]    [Reentrancy Attacks]    [Insolvency Cascades]
-  Medium   | [TTL State Eviction]     [Front-Running Logs]    [Multisig Key Loss]
-  Low      | [Client UI Disruption]   [RPC Downtime]          [Small Dust Balances]
-           +-----------------------------------------------------------------------
-                         Low                     Medium                  High
-```
+2. **Incorrect UI calculations**
+   - Mitigation: The frontend must simulate transactions through Soroban RPC before requesting signatures. Contracts remain the final authority.
 
-### Critical Exploits Handled:
-1. **Oracle Price Manipulation**: Assailed by flash loan attacks pushing down price pools.
-   * *Mitigation*: We do not use AMM pools for on-chain pricing. All assets resolve to the `oracle_aggregator` combining oracle network feeds.
-2. **Reentrancy**: Reentering functions during transfer callbacks.
-   * *Mitigation*: Soroban does not support arbitrary execution callbacks during native token transfers, but we enforce strict check-effects-interactions patterns.
-3. **Insolvency cascades**: Undercollateralized loans cannot be liquidated fast enough.
-   * *Mitigation*: The 2-step liquidation process guarantees CPU execution. We establish a **Treasury Insurance Fund** to absorb bad debt.
-4. **Infinite Deposit/Borrow Vulnerability**: Listing a new or volatile asset with unlimited pool borrowing availability.
-   * *Mitigation*: Implementation of strict `supplyCap` and `borrowCap` values on all reserves. All deposits and borrows check caps on-chain during simulation and transaction execution.
-5. **Stale Oracle Pricing**: Exploiting outdated feed values during high market volatility.
-   * *Mitigation*: Oracle aggregator requires active updates; price updates must be newer than the stale window threshold (e.g., 3600 seconds), otherwise transaction reverts.
-6. **Indexer Lag & Front-running**: Executing trades or liquidations based on stale UI parameters.
-   * *Mitigation*: Emitting indexer status flags (`isStale`) in API payloads and disabling risky user actions (like borrowing and withdrawing) on the dashboard when lag exceeds 10 ledger blocks.
+3. **RPC downtime or slow reads**
+   - Mitigation: MVP can show degraded UX and retry. The frontend must not fall back to backend/indexer balances as authoritative state.
 
----
+4. **Health Factor bypass**
+   - Mitigation: Borrow, withdraw, and liquidation checks must be enforced in contract/risk logic, not only in frontend code.
 
-## 3. Access Control Systems
+5. **Manual liquidation only**
+   - Mitigation: MVP supports user/liquidator-called liquidation. Automated monitoring is Post-MVP.
 
-- **`Admin` Role**: Can configure reserve assets, toggle pausing status, adjust risk factors, and increase caps. Assigned exclusively to the **Governance Timelock** contract.
-- **`Guardian` Role**: Emergency multisig. Can trigger circuit breakers (pause operations) and perform immediate **cap reductions**, but cannot increase caps, upgrade contracts, or extract funds.
-- **`User` Role**: Anyone with a valid Stellar address. Can interact with standard supply, borrow, repay, and withdraw functions.
+6. **Event visibility gaps**
+   - Mitigation: Basic events and Stellar Expert links support debugging. Indexed analytics are Post-MVP.
 
----
+## 3. Out of MVP Security Controls
 
-## 4. Circuit Breakers & Emergency Actions
+The following controls are Post-MVP and must not block the demo:
 
-### A. Emergency Pausing
-Each asset reserve has an `is_active` flag. In the event of extreme market volatility, oracle failures, or suspected smart contract anomalies:
-- A Guardian can invoke `toggle_pause(reserve_id)` to instantly disable new deposits and borrows.
-- Repayments and liquidations remain active to ensure the protocol can restore solvency.
+- Indexer lag detection.
+- Dashboard stale-data gating based on backend sync lag.
+- PostgreSQL single-writer enforcement.
+- Background worker hardening.
+- Queue/backpressure controls.
+- Automated liquidation bot safeguards.
 
-### B. Emergency Cap Reductions
-- The Guardian role can invoke `emergency_reduce_caps(asset, new_supply_cap, new_borrow_cap)` to immediately decrease limits on troubled assets.
-- If the new cap is below the current total active supplied/borrowed amounts, no new deposits or borrows are accepted, but existing positions are not liquidated or forced to close.
-- Cap increases must go through the 48-hour Governance timelock queue.
+## 4. Manual Liquidation Security
 
----
+Manual liquidation remains in MVP:
 
-## 5. Security Audit Plan
+- Eligibility must require Health Factor below the configured minimum.
+- Close factor and liquidation bonus must be bounded by reserve risk config.
+- Collateral seized and debt repaid must use checked integer math.
+- Liquidation events should be emitted for explorer/debug visibility.
 
-Before deploying to the Stellar mainnet, UdonFi V2 must complete a structured security audit:
-1. **Formal Verification**: Mathematically prove that the `risk_engine` calculations for Health Factor can never overflow or return negative values.
-2. **Static Analysis**: Compile with cargo lints and audit using automated security analyzers.
-3. **External Auditing**: Engage independent auditing firms to perform manual code reviews of the modular contract layouts.
-4. **Bug Bounty Program**: Run public incentivized testing programs on the Stellar Testnet.
+## 5. Not Production-Ready
+
+The MVP is not mainnet-ready. Before production, the protocol still needs full audits, oracle hardening, operational monitoring, frontend security review, incident response procedures, and Post-MVP analytics/monitoring decisions.

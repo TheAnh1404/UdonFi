@@ -1,14 +1,13 @@
 # Architecture Overview Diagram
 
-This diagram displays the unified modular and data flow blueprint of the UdonFi V2 system.
+This diagram shows the current UdonFi V2 MVP architecture. Backend, indexer, bot, PostgreSQL, queues, workers, and real-time analytics are Post-MVP / Future Work.
 
 ```mermaid
 graph TD
-    User([User / Liquidator]) <--> |Web3 interaction| FE[React Web Client]
-    FE <--> |RPC Read / Write| SC[Soroban Smart Contracts]
-    FE <--> |REST API / WebSocket| BE[Backend Service]
-    Indexer[Event Indexer Bot] --> |Scan events| SC
-    Indexer --> |Write events & state| DB[(PostgreSQL Database)]
-    BE <--> |Read / Write| DB
-    SC <--> |Fetch prices| Oracle[Oracle Aggregator]
+    User([User / Liquidator]) <--> |Wallet UX| FE[React Frontend]
+    FE <--> |Connect / Sign| Wallet[Freighter Wallet]
+    FE <--> |Read state / Submit signed tx| RPC[Soroban RPC]
+    RPC <--> |Invoke / Query| SC[UdonFi Soroban Smart Contracts]
+    SC <--> |Ledger state| Stellar[Stellar Testnet]
+    FE --> |Transaction link| Expert[Stellar Expert]
 ```

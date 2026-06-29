@@ -1,0 +1,20 @@
+[package]
+name = "udonfi-risk"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "mod.rs"
+crate-type = ["lib"]
+
+[dependencies]
+soroban-sdk = "25.0.1"
+udonfi-accounting = { path = "../accounting" }
+udonfi-config-engine = { path = "../config" }
+udonfi-reserve-registry = { path = "../reserve" }
+udonfi-shared = { path = "../../shared" }
+
+[dev-dependencies]
+soroban-sdk = { version = "25.0.1", features = ["testutils"] }
+
+[workspace]

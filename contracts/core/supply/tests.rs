@@ -1,18 +1,26 @@
 #![cfg(test)]
 
-use crate::flow::prepare_deposit;
+use crate::flow::{execute_deposit, prepare_deposit};
 use crate::model::{
-    DepositRequest, VALIDATION_FLAG_ACCOUNTING_VALID, VALIDATION_FLAG_INTEREST_ACCRUAL_REQUIRED,
-    VALIDATION_FLAG_RESERVE_ACTIVE,
+    DepositRequest, VALIDATION_STATUS_ACCOUNTING_VALID,
+    VALIDATION_STATUS_INTEREST_ACCRUAL_REQUIRED, VALIDATION_STATUS_RESERVE_ACTIVE,
 };
-use soroban_sdk::{contract, contractimpl, testutils::Address as _, Address, Env, String, Symbol};
-use udonfi_accounting::{write_reserve_accounting, ReserveAccounting};
+use soroban_sdk::{
+    contract, contractimpl,
+    testutils::{Address as _, Events},
+    Address, Env, String, Symbol,
+};
+use udonfi_accounting::{
+    actual_supply_to_scaled, read_accounting_ledger, read_reserve_accounting,
+    write_accounting_ledger, write_reserve_accounting, AccountingLedger, ReserveAccounting,
+    ACCOUNTING_VERSION,
+};
 use udonfi_config_engine::{default_validation_config, storage::write_latest_validation_config};
 use udonfi_pool_state::{storage::write_pool_state, Pool, ProtocolStatus};
 use udonfi_reserve_registry::{storage::write_reserve, Reserve, ReserveStatus};
 use udonfi_shared::{
-    BasisPoints, LedgerSequence, LendingError, Ltv, Ray, ReserveFactor, ReserveId, Timestamp, Wad,
-    RAY,
+    BasisPoints, LedgerSequence, LendingError, Ltv, Ray, ReserveFactor, ReserveId, ScaledBalance,
+    Timestamp, Wad, RAY, SUPPLY_DEPOSIT_COMPLETED,
 };
 
 #[contract]
@@ -97,13 +105,54 @@ fn seed_reserve(
     asset
 }
 
-fn seed_accounting(env: &Env, current_supply: i128, last_updated_ledger: LedgerSequence) {
+fn seed_accounting_with_index(
+    env: &Env,
+    current_supply: i128,
+    last_updated_ledger: LedgerSequence,
+    supply_index: Ray,
+) {
     let mut accounting = ReserveAccounting::new(reserve_id(), last_updated_ledger);
     accounting.total_liquidity = Wad(current_supply);
     accounting.available_liquidity = Wad(current_supply);
     accounting.total_actual_supply = Wad(current_supply);
-    accounting.total_scaled_supply = udonfi_shared::ScaledBalance(current_supply);
+    accounting.total_scaled_supply = actual_supply_to_scaled(Wad(current_supply), supply_index)
+        .unwrap_or(ScaledBalance(current_supply));
+    accounting.supply_index = supply_index;
     write_reserve_accounting(env, &accounting);
+}
+
+fn seed_accounting_ledger(
+    env: &Env,
+    current_supply: i128,
+    scaled_supply: ScaledBalance,
+    last_updated_ledger: LedgerSequence,
+) {
+    let mut ledger = AccountingLedger::new(last_updated_ledger);
+    ledger.total_assets = Wad(current_supply);
+    ledger.total_liabilities = Wad(current_supply);
+    ledger.total_liquidity = Wad(current_supply);
+    ledger.total_scaled_supply = scaled_supply;
+    write_accounting_ledger(env, &ledger);
+}
+
+fn seed_execution_accounting_with_index(
+    env: &Env,
+    current_supply: i128,
+    last_updated_ledger: LedgerSequence,
+    supply_index: Ray,
+) {
+    seed_accounting_with_index(env, current_supply, last_updated_ledger, supply_index);
+    let reserve_accounting = read_reserve_accounting(env, reserve_id()).unwrap();
+    seed_accounting_ledger(
+        env,
+        current_supply,
+        reserve_accounting.total_scaled_supply,
+        last_updated_ledger,
+    );
+}
+
+fn seed_accounting(env: &Env, current_supply: i128, last_updated_ledger: LedgerSequence) {
+    seed_accounting_with_index(env, current_supply, last_updated_ledger, Ray(RAY));
 }
 
 fn request(env: &Env, asset: Address, amount: i128, current_ledger: u32) -> DepositRequest {
@@ -130,6 +179,23 @@ fn seed_valid_state(env: &Env, reserve_last_accrual: u32, accounting_last_update
     asset
 }
 
+fn seed_valid_execution_state(
+    env: &Env,
+    reserve_last_accrual: u32,
+    accounting_last_updated: u32,
+) -> Address {
+    seed_pool(env, ProtocolStatus::Active, false);
+    seed_validation_config(env, 10, 1_000);
+    let asset = seed_reserve(
+        env,
+        ReserveStatus::Active,
+        1_000,
+        ledger(reserve_last_accrual),
+    );
+    seed_execution_accounting_with_index(env, 100, ledger(accounting_last_updated), Ray(RAY));
+    asset
+}
+
 #[test]
 #[allow(deprecated)]
 fn test_valid_deposit_preparation() {
@@ -146,11 +212,179 @@ fn test_valid_deposit_preparation() {
         assert_eq!(result.current_available_liquidity, Wad(100));
         assert_eq!(result.projected_total_supply, Wad(150));
         assert_eq!(result.supply_cap, Wad(1_000));
-        assert!(!result.required_interest_accrual);
+        assert!(!result.requires_interest_accrual);
         assert_eq!(
-            result.validation_flags,
-            VALIDATION_FLAG_RESERVE_ACTIVE | VALIDATION_FLAG_ACCOUNTING_VALID
+            result.validation_status,
+            VALIDATION_STATUS_RESERVE_ACTIVE | VALIDATION_STATUS_ACCOUNTING_VALID
         );
+    });
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_successful_deposit_execution_updates_accounting_and_emits_event() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockSupplyContract);
+
+    env.as_contract(&contract_id, || {
+        let asset = seed_valid_execution_state(&env, 20, 20);
+        let request = request(&env, asset, 50, 20);
+        let actor = request.actor.clone();
+
+        let result = execute_deposit(&env, &request).unwrap();
+
+        assert_eq!(result.actor, actor);
+        assert_eq!(result.reserve_id, reserve_id());
+        assert_eq!(result.amount, Wad(50));
+        assert_eq!(result.scaled_supply_minted, ScaledBalance(50));
+        assert_eq!(result.supply_index, Ray(RAY));
+        assert_eq!(result.previous_total_liquidity, Wad(100));
+        assert_eq!(result.updated_total_liquidity, Wad(150));
+        assert_eq!(result.previous_scaled_supply, ScaledBalance(100));
+        assert_eq!(result.updated_scaled_supply, ScaledBalance(150));
+        assert_eq!(result.ledger, ledger(20));
+        assert_eq!(result.accounting_version, ACCOUNTING_VERSION);
+        assert_eq!(
+            result.event_name,
+            String::from_str(&env, SUPPLY_DEPOSIT_COMPLETED)
+        );
+
+        let reserve_accounting = read_reserve_accounting(&env, reserve_id()).unwrap();
+        assert_eq!(reserve_accounting.total_liquidity, Wad(150));
+        assert_eq!(reserve_accounting.available_liquidity, Wad(150));
+        assert_eq!(reserve_accounting.total_actual_supply, Wad(150));
+        assert_eq!(reserve_accounting.total_scaled_supply, ScaledBalance(150));
+        assert_eq!(reserve_accounting.last_updated_ledger, ledger(20));
+
+        let ledger_accounting = read_accounting_ledger(&env).unwrap();
+        assert_eq!(ledger_accounting.total_assets, Wad(150));
+        assert_eq!(ledger_accounting.total_liabilities, Wad(150));
+        assert_eq!(ledger_accounting.total_liquidity, Wad(150));
+        assert_eq!(ledger_accounting.total_scaled_supply, ScaledBalance(150));
+        assert_eq!(ledger_accounting.last_updated_ledger, ledger(20));
+        assert_eq!(ledger_accounting.accounting_version, ACCOUNTING_VERSION);
+
+        assert_eq!(env.events().all().events().len(), 1);
+    });
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_validation_failure_prevents_deposit_execution() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockSupplyContract);
+
+    env.as_contract(&contract_id, || {
+        let asset = seed_valid_execution_state(&env, 20, 20);
+        let previous_reserve_accounting = read_reserve_accounting(&env, reserve_id()).unwrap();
+        let previous_ledger_accounting = read_accounting_ledger(&env).unwrap();
+
+        let err = execute_deposit(&env, &request(&env, asset, 901, 20));
+
+        assert_eq!(err, Err(LendingError::SupplyCapViolation));
+        assert_eq!(
+            read_reserve_accounting(&env, reserve_id()).unwrap(),
+            previous_reserve_accounting
+        );
+        assert_eq!(
+            read_accounting_ledger(&env).unwrap(),
+            previous_ledger_accounting
+        );
+        assert_eq!(env.events().all().events().len(), 0);
+    });
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_scaled_supply_calculation_uses_current_supply_index() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockSupplyContract);
+
+    env.as_contract(&contract_id, || {
+        seed_pool(&env, ProtocolStatus::Active, false);
+        seed_validation_config(&env, 1, 1_000);
+        let asset = seed_reserve(&env, ReserveStatus::Active, 1_000, ledger(20));
+        let supply_index = Ray(RAY * 2);
+        seed_execution_accounting_with_index(&env, 0, ledger(20), supply_index);
+
+        let result = execute_deposit(&env, &request(&env, asset, 100, 20)).unwrap();
+
+        assert_eq!(result.supply_index, supply_index);
+        assert_eq!(result.scaled_supply_minted, ScaledBalance(50));
+        assert_eq!(
+            result.scaled_supply_minted,
+            actual_supply_to_scaled(Wad(100), supply_index).unwrap()
+        );
+    });
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_supply_share_minting_rounds_down() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockSupplyContract);
+
+    env.as_contract(&contract_id, || {
+        seed_pool(&env, ProtocolStatus::Active, false);
+        seed_validation_config(&env, 1, 1_000);
+        let asset = seed_reserve(&env, ReserveStatus::Active, 1_000, ledger(20));
+        seed_execution_accounting_with_index(&env, 0, ledger(20), Ray(RAY * 3));
+
+        let result = execute_deposit(&env, &request(&env, asset, 10, 20)).unwrap();
+
+        assert_eq!(result.scaled_supply_minted, ScaledBalance(3));
+        assert_eq!(result.updated_scaled_supply, ScaledBalance(3));
+    });
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_dust_deposit_rejected_when_scaled_supply_is_zero() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockSupplyContract);
+
+    env.as_contract(&contract_id, || {
+        seed_pool(&env, ProtocolStatus::Active, false);
+        seed_validation_config(&env, 1, 1_000);
+        let asset = seed_reserve(&env, ReserveStatus::Active, 1_000, ledger(20));
+        seed_execution_accounting_with_index(&env, 0, ledger(20), Ray(RAY * 2));
+
+        let err = execute_deposit(&env, &request(&env, asset, 1, 20));
+
+        assert_eq!(err, Err(LendingError::InvalidAmount));
+        let reserve_accounting = read_reserve_accounting(&env, reserve_id()).unwrap();
+        assert_eq!(reserve_accounting.total_liquidity, Wad(0));
+        assert_eq!(reserve_accounting.total_actual_supply, Wad(0));
+        assert_eq!(reserve_accounting.total_scaled_supply, ScaledBalance(0));
+        assert_eq!(read_accounting_ledger(&env).unwrap().total_assets, Wad(0));
+        assert_eq!(env.events().all().events().len(), 0);
+    });
+}
+
+#[test]
+#[allow(deprecated)]
+fn test_overflow_rejection_prevents_accounting_commit() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockSupplyContract);
+
+    env.as_contract(&contract_id, || {
+        let asset = seed_valid_execution_state(&env, 20, 20);
+        let previous_reserve_accounting = read_reserve_accounting(&env, reserve_id()).unwrap();
+        let mut ledger_accounting = read_accounting_ledger(&env).unwrap();
+        ledger_accounting.total_assets = Wad(i128::MAX);
+        ledger_accounting.total_liabilities = Wad(i128::MAX);
+        ledger_accounting.total_liquidity = Wad(i128::MAX);
+        write_accounting_ledger(&env, &ledger_accounting);
+
+        let err = execute_deposit(&env, &request(&env, asset, 50, 20));
+
+        assert_eq!(err, Err(LendingError::MathOverflow));
+        assert_eq!(
+            read_reserve_accounting(&env, reserve_id()).unwrap(),
+            previous_reserve_accounting
+        );
+        assert_eq!(read_accounting_ledger(&env).unwrap(), ledger_accounting);
+        assert_eq!(env.events().all().events().len(), 0);
     });
 }
 
@@ -294,12 +528,12 @@ fn test_interest_accrual_required_flag() {
         let asset = seed_valid_state(&env, 20, 20);
         let result = prepare_deposit(&env, &request(&env, asset, 50, 25)).unwrap();
 
-        assert!(result.required_interest_accrual);
+        assert!(result.requires_interest_accrual);
         assert_eq!(
-            result.validation_flags,
-            VALIDATION_FLAG_RESERVE_ACTIVE
-                | VALIDATION_FLAG_ACCOUNTING_VALID
-                | VALIDATION_FLAG_INTEREST_ACCRUAL_REQUIRED
+            result.validation_status,
+            VALIDATION_STATUS_RESERVE_ACTIVE
+                | VALIDATION_STATUS_ACCOUNTING_VALID
+                | VALIDATION_STATUS_INTEREST_ACCRUAL_REQUIRED
         );
     });
 }
@@ -314,7 +548,7 @@ fn test_no_interest_accrual_needed_when_current_ledger_equals_last_accrual_ledge
         let asset = seed_valid_state(&env, 25, 20);
         let result = prepare_deposit(&env, &request(&env, asset, 50, 25)).unwrap();
 
-        assert!(!result.required_interest_accrual);
+        assert!(!result.requires_interest_accrual);
     });
 }
 

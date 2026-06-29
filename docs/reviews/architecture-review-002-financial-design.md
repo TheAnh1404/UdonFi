@@ -4,6 +4,8 @@
 *   **Review Board**: UdonFi V2 Financial Design Review Board
 *   **Status**: APPROVED TO PREPARE IMPLEMENTATION PLAN, NOT APPROVED FOR MAINNET
 
+> Historical Review: this review predates the MVP scope refactor. Any backend, indexer, API, PostgreSQL, queue, or real-time analytics requirements referenced below are now Post-MVP / Future Work unless restated in current MVP docs.
+
 ---
 
 ## 1. Executive Summary

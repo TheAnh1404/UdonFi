@@ -234,7 +234,9 @@ This document defines the core safety invariants of the UdonFi V2 protocol. Thes
 
 ---
 
-## 6. Indexer & API Invariants (INV-IDX-001 to INV-IDX-005)
+## 6. Post-MVP Indexer & API Invariants (INV-IDX-001 to INV-IDX-005)
+
+These invariants are preserved for future indexer/backend work. They are not required for MVP contract tests, frontend startup, or the Testnet demo. The MVP frontend reads authoritative state directly from Soroban RPC.
 
 ### INV-IDX-001: Idempotency of Event Writes
 - **Description**: Processing the same on-chain event twice must not create duplicate records in PostgreSQL.

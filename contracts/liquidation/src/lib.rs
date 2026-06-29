@@ -22,16 +22,11 @@
 
 #![no_std]
 
-use soroban_sdk::{
-    contract, contractimpl, symbol_short, token, Address, BytesN, Env, IntoVal,
-};
+use soroban_sdk::{contract, contractimpl, symbol_short, token, Address, BytesN, Env, IntoVal};
 use udonfi_common::{
-    bitmap::*,
-    math::*,
-    LendingError, LiquidationDataKey, LiquidationParams,
-    HEALTH_FACTOR_LIQUIDATION_THRESHOLD, LIQUIDATION_SESSION_MAX_AGE,
-    RAY, WAD, TTL_EXTEND_TO, TTL_THRESHOLD,
-    PoolDataKey, ReserveConfig,
+    bitmap::*, math::*, LendingError, LiquidationDataKey, LiquidationParams, PoolDataKey,
+    ReserveConfig, HEALTH_FACTOR_LIQUIDATION_THRESHOLD, LIQUIDATION_SESSION_MAX_AGE, RAY,
+    TTL_EXTEND_TO, TTL_THRESHOLD, WAD,
 };
 
 #[contract]
@@ -107,7 +102,7 @@ impl LiquidationContract {
         let hf_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
             &pool,
             &soroban_sdk::Symbol::new(&env, "get_health_factor"),
-            soroban_sdk::vec![&env, borrower.clone().into_val(&env)]
+            soroban_sdk::vec![&env, borrower.clone().into_val(&env)],
         );
 
         if let Ok(Ok(hf)) = hf_res {
@@ -121,7 +116,7 @@ impl LiquidationContract {
         let reserve_res = env.try_invoke_contract::<ReserveConfig, soroban_sdk::Error>(
             &pool,
             &soroban_sdk::Symbol::new(&env, "get_reserve_info"),
-            soroban_sdk::vec![&env, collateral_asset.clone().into_val(&env)]
+            soroban_sdk::vec![&env, collateral_asset.clone().into_val(&env)],
         );
         if let Ok(Ok(config)) = reserve_res {
             liquidation_bonus = config.liquidation_bonus;
@@ -136,14 +131,14 @@ impl LiquidationContract {
         let oracle_res = env.try_invoke_contract::<Address, soroban_sdk::Error>(
             &pool,
             &soroban_sdk::Symbol::new(&env, "oracle"),
-            soroban_sdk::vec![&env]
+            soroban_sdk::vec![&env],
         );
 
         if let Ok(Ok(oracle)) = oracle_res {
             let debt_price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
                 &oracle,
                 &soroban_sdk::Symbol::new(&env, "get_price_usd"),
-                soroban_sdk::vec![&env, debt_asset.clone().into_val(&env)]
+                soroban_sdk::vec![&env, debt_asset.clone().into_val(&env)],
             );
             if let Ok(Ok(p)) = debt_price_res {
                 debt_price = p;
@@ -152,7 +147,7 @@ impl LiquidationContract {
             let collateral_price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
                 &oracle,
                 &soroban_sdk::Symbol::new(&env, "get_price_usd"),
-                soroban_sdk::vec![&env, collateral_asset.clone().into_val(&env)]
+                soroban_sdk::vec![&env, collateral_asset.clone().into_val(&env)],
             );
             if let Ok(Ok(p)) = collateral_price_res {
                 collateral_price = p;
@@ -167,7 +162,7 @@ impl LiquidationContract {
                 &env,
                 borrower.clone().into_val(&env),
                 collateral_asset.clone().into_val(&env),
-            ]
+            ],
         );
         let mut collateral_balance = 0i128;
         if let Ok(Ok(bal)) = collateral_balance_res {
@@ -182,21 +177,20 @@ impl LiquidationContract {
 
         if collateral_to_seize > collateral_balance {
             collateral_to_seize = collateral_balance;
-            
+
             // Recalculate debt_to_cover to match the seized collateral:
             // debt_to_cover = (collateral_to_seize * collateral_price) / (debt_price * bonus_factor)
-            let raw_seized_value = wad_mul(collateral_to_seize, collateral_price).expect("overflow");
+            let raw_seized_value =
+                wad_mul(collateral_to_seize, collateral_price).expect("overflow");
             let raw_debt_value = wad_div(raw_seized_value, bonus_factor).expect("overflow");
             actual_debt_to_cover = wad_div(raw_debt_value, debt_price).expect("overflow");
         }
 
         // Generate a unique session ID
-        let session_id = env.crypto().sha256(
-            &soroban_sdk::Bytes::from_array(
-                &env,
-                &env.ledger().sequence().to_be_bytes(),
-            ),
-        );
+        let session_id = env.crypto().sha256(&soroban_sdk::Bytes::from_array(
+            &env,
+            &env.ledger().sequence().to_be_bytes(),
+        ));
         let session_id_32: BytesN<32> = BytesN::from_array(&env, &{
             let mut arr = [0u8; 32];
             let hash_bytes = session_id.to_array();
@@ -295,23 +289,27 @@ impl LiquidationContract {
                 params.collateral_asset.clone().into_val(&env),
                 params.debt_to_cover.into_val(&env),
                 params.collateral_to_seize.into_val(&env),
-            ]
+            ],
         );
         if pool_res.is_err() {
             panic!("liquidation pool hook failed");
         }
 
         // Clean up session
-        env.storage().temporary().remove(
-            &LiquidationDataKey::LiquidationSession(session_id),
-        );
+        env.storage()
+            .temporary()
+            .remove(&LiquidationDataKey::LiquidationSession(session_id));
 
         env.storage()
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
         env.events().publish(
-            (symbol_short!("liq_exe"), params.borrower.clone(), liquidator),
+            (
+                symbol_short!("liq_exe"),
+                params.borrower.clone(),
+                liquidator,
+            ),
             (params.debt_to_cover, params.collateral_to_seize),
         );
     }
@@ -339,12 +337,15 @@ impl LiquidationContract {
     ///
     /// In production, this would call pool.get_health_factor(borrower).
     pub fn is_liquidatable(env: Env, borrower: Address) -> bool {
-        let pool_res = env.storage().instance().get::<_, Address>(&LiquidationDataKey::Pool);
+        let pool_res = env
+            .storage()
+            .instance()
+            .get::<_, Address>(&LiquidationDataKey::Pool);
         if let Some(pool) = pool_res {
             let hf_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
                 &pool,
                 &soroban_sdk::Symbol::new(&env, "get_health_factor"),
-                soroban_sdk::vec![&env, borrower.into_val(&env)]
+                soroban_sdk::vec![&env, borrower.into_val(&env)],
             );
             if let Ok(Ok(hf)) = hf_res {
                 return hf < HEALTH_FACTOR_LIQUIDATION_THRESHOLD;
@@ -459,7 +460,8 @@ mod test {
         // Register dummy debt asset contract (Stellar Asset Contract) to allow `debt_token.transfer`
         let admin = Address::generate(&env);
         let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
-        let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token_contract.address());
+        let token_admin =
+            soroban_sdk::token::StellarAssetClient::new(&env, &token_contract.address());
         let debt_asset = token_contract.address();
 
         let contract_id = env.register(LiquidationContract, ());
@@ -490,7 +492,7 @@ mod test {
         let get_res = env.try_invoke_contract::<LiquidationParams, soroban_sdk::Error>(
             &contract_id,
             &soroban_sdk::Symbol::new(&env, "get_session"),
-            soroban_sdk::vec![&env, session_id.into_val(&env)]
+            soroban_sdk::vec![&env, session_id.into_val(&env)],
         );
         assert!(get_res.is_err());
     }

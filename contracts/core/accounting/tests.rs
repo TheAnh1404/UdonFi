@@ -1,29 +1,38 @@
 #![cfg(test)]
 
 use crate::bad_debt::{get_bad_debt, record_bad_debt, reduce_bad_debt};
+use crate::bad_debt_accounting::{apply_bad_debt_coverage, apply_bad_debt_recording};
 use crate::balance::{
     decrease_liquidity, decrease_scaled_supply, increase_liquidity, increase_scaled_supply,
 };
 use crate::debt::{decrease_scaled_debt, increase_scaled_debt};
+use crate::debt_accounting::{apply_debt_decrease, apply_debt_increase};
 use crate::errors::LendingError;
 use crate::insurance::{accrue_to_insurance, cover_bad_debt};
+use crate::insurance_accounting::apply_insurance_accrual;
 use crate::ledger::new_accounting_ledger;
-use crate::model::{AccountingLedger, BadDebtRecord, ReserveAccounting, ACCOUNTING_VERSION};
+use crate::liquidity_accounting::{apply_liquidity_decrease, apply_liquidity_increase};
+use crate::model::{
+    AccountingLedger, BadDebtRecord, ReserveAccounting, UserAccountingSnapshot, ACCOUNTING_VERSION,
+};
 use crate::reserve::{new_reserve_accounting, set_reserve_indices};
 use crate::shares::{
     actual_debt_to_scaled, actual_supply_to_scaled, scaled_debt_to_actual, scaled_supply_to_actual,
 };
 use crate::storage::{
     has_accounting_ledger, read_accounting_ledger, read_accounting_version, read_bad_debt_record,
-    read_reserve_accounting, write_accounting_ledger, write_accounting_version,
-    write_bad_debt_record, write_reserve_accounting,
+    read_reserve_accounting, read_user_accounting_snapshot, write_accounting_ledger,
+    write_accounting_version, write_bad_debt_record, write_reserve_accounting,
+    write_user_accounting_snapshot,
 };
+use crate::supply_accounting::{apply_supply_decrease, apply_supply_increase};
 use crate::treasury::{accrue_to_treasury, withdraw_from_treasury_accounting};
+use crate::treasury_accounting::apply_treasury_accrual;
 use crate::validation::{
     validate_accounting_equation, validate_debt_bounds, validate_liquidity_bounds,
     validate_non_negative_balances, validate_reserve_accounting_equation,
 };
-use soroban_sdk::{contract, contractimpl, Env};
+use soroban_sdk::{contract, contractimpl, testutils::Address as _, Address, Env};
 use udonfi_shared::{LedgerSequence, Ray, ReserveId, ScaledBalance, ScaledDebt, Wad, RAY};
 
 #[contract]
@@ -81,6 +90,312 @@ fn balanced_bad_debt_state() -> (AccountingLedger, ReserveAccounting) {
     reserve.bad_debt = Wad(100);
 
     (ledger, reserve)
+}
+
+#[test]
+fn test_account_002_supply_increase_operation() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+
+    let result = apply_supply_increase(
+        &mut ledger,
+        &mut reserve,
+        Wad(100),
+        Some(Wad(1_000)),
+        ledger_seq(2),
+    )
+    .unwrap();
+
+    assert_eq!(result.reserve_id, ReserveId(0));
+    assert_eq!(result.previous_actual_supply, Wad(0));
+    assert_eq!(result.updated_actual_supply, Wad(100));
+    assert_eq!(result.actual_delta, Wad(100));
+    assert_eq!(result.scaled_delta, ScaledBalance(100));
+    assert_eq!(result.current_ledger, ledger_seq(2));
+    assert_eq!(result.accounting_version, ACCOUNTING_VERSION);
+    assert_eq!(ledger.total_liabilities, Wad(100));
+}
+
+#[test]
+fn test_account_002_supply_decrease_operation() {
+    let (mut ledger, mut reserve) = balanced_liquidity_supply_state(500);
+
+    let result = apply_supply_decrease(&mut ledger, &mut reserve, Wad(125), ledger_seq(3)).unwrap();
+
+    assert_eq!(result.previous_scaled_supply, ScaledBalance(500));
+    assert_eq!(result.updated_scaled_supply, ScaledBalance(375));
+    assert_eq!(result.previous_actual_supply, Wad(500));
+    assert_eq!(result.updated_actual_supply, Wad(375));
+    assert_eq!(ledger.total_liabilities, Wad(375));
+}
+
+#[test]
+fn test_account_002_supply_cap_rejection() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+
+    let err = apply_supply_increase(
+        &mut ledger,
+        &mut reserve,
+        Wad(101),
+        Some(Wad(100)),
+        ledger_seq(2),
+    );
+
+    assert_eq!(err, Err(LendingError::SupplyCapViolation));
+    assert_eq!(reserve.total_actual_supply, Wad(0));
+}
+
+#[test]
+fn test_account_002_debt_increase_operation() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+
+    let result = apply_debt_increase(
+        &mut ledger,
+        &mut reserve,
+        Wad(250),
+        Some(Wad(1_000)),
+        ledger_seq(2),
+    )
+    .unwrap();
+
+    assert_eq!(result.previous_actual_debt, Wad(0));
+    assert_eq!(result.updated_actual_debt, Wad(250));
+    assert_eq!(result.scaled_delta, ScaledDebt(250));
+    assert_eq!(ledger.total_assets, Wad(250));
+}
+
+#[test]
+fn test_account_002_debt_decrease_operation() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+    apply_debt_increase(
+        &mut ledger,
+        &mut reserve,
+        Wad(300),
+        Some(Wad(1_000)),
+        ledger_seq(2),
+    )
+    .unwrap();
+
+    let result = apply_debt_decrease(&mut ledger, &mut reserve, Wad(75), ledger_seq(3)).unwrap();
+
+    assert_eq!(result.previous_scaled_debt, ScaledDebt(300));
+    assert_eq!(result.updated_scaled_debt, ScaledDebt(225));
+    assert_eq!(result.previous_actual_debt, Wad(300));
+    assert_eq!(result.updated_actual_debt, Wad(225));
+    assert_eq!(ledger.total_assets, Wad(225));
+}
+
+#[test]
+fn test_account_002_borrow_cap_rejection() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+
+    let err = apply_debt_increase(
+        &mut ledger,
+        &mut reserve,
+        Wad(101),
+        Some(Wad(100)),
+        ledger_seq(2),
+    );
+
+    assert_eq!(err, Err(LendingError::BorrowCapViolation));
+    assert_eq!(reserve.total_actual_debt, Wad(0));
+}
+
+#[test]
+fn test_account_002_liquidity_increase_operation() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+
+    let result =
+        apply_liquidity_increase(&mut ledger, &mut reserve, Wad(400), ledger_seq(2)).unwrap();
+
+    assert_eq!(result.previous_total_liquidity, Wad(0));
+    assert_eq!(result.updated_total_liquidity, Wad(400));
+    assert_eq!(result.previous_available_liquidity, Wad(0));
+    assert_eq!(result.updated_available_liquidity, Wad(400));
+    assert_eq!(ledger.total_assets, Wad(400));
+}
+
+#[test]
+fn test_account_002_liquidity_decrease_operation() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+    apply_liquidity_increase(&mut ledger, &mut reserve, Wad(400), ledger_seq(2)).unwrap();
+
+    let result =
+        apply_liquidity_decrease(&mut ledger, &mut reserve, Wad(150), ledger_seq(3)).unwrap();
+
+    assert_eq!(result.previous_total_liquidity, Wad(400));
+    assert_eq!(result.updated_total_liquidity, Wad(250));
+    assert_eq!(result.updated_available_liquidity, Wad(250));
+    assert_eq!(ledger.total_liquidity, Wad(250));
+}
+
+#[test]
+fn test_account_002_treasury_accrual_operation() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+
+    let result = apply_treasury_accrual(&mut ledger, &mut reserve, Wad(30), ledger_seq(2)).unwrap();
+
+    assert_eq!(result.previous_reserve_treasury, Wad(0));
+    assert_eq!(result.updated_reserve_treasury, Wad(30));
+    assert_eq!(result.previous_treasury_balance, Wad(0));
+    assert_eq!(result.updated_treasury_balance, Wad(30));
+    assert_eq!(ledger.protocol_equity, Wad(30));
+}
+
+#[test]
+fn test_account_002_insurance_accrual_operation() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+
+    let result =
+        apply_insurance_accrual(&mut ledger, &mut reserve, Wad(40), ledger_seq(2)).unwrap();
+
+    assert_eq!(result.previous_reserve_insurance, Wad(0));
+    assert_eq!(result.updated_reserve_insurance, Wad(40));
+    assert_eq!(result.previous_insurance_balance, Wad(0));
+    assert_eq!(result.updated_insurance_balance, Wad(40));
+    assert_eq!(ledger.protocol_equity, Wad(40));
+}
+
+#[test]
+fn test_account_002_bad_debt_recording_operation() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+    apply_debt_increase(
+        &mut ledger,
+        &mut reserve,
+        Wad(200),
+        Some(Wad(1_000)),
+        ledger_seq(2),
+    )
+    .unwrap();
+
+    let result =
+        apply_bad_debt_recording(&mut ledger, &mut reserve, Wad(50), ledger_seq(3)).unwrap();
+
+    assert_eq!(result.previous_bad_debt, Wad(0));
+    assert_eq!(result.updated_bad_debt, Wad(50));
+    assert_eq!(result.delta, Wad(50));
+    assert_eq!(result.scaled_debt_delta, ScaledDebt(0));
+    assert_eq!(ledger.total_bad_debt, Wad(50));
+}
+
+#[test]
+fn test_account_002_bad_debt_coverage_operation() {
+    let (mut ledger, mut reserve) = balanced_bad_debt_state();
+
+    let result =
+        apply_bad_debt_coverage(&mut ledger, &mut reserve, Wad(60), ledger_seq(11)).unwrap();
+
+    assert_eq!(result.previous_bad_debt, Wad(100));
+    assert_eq!(result.updated_bad_debt, Wad(40));
+    assert_eq!(result.previous_insurance_balance, Wad(100));
+    assert_eq!(result.updated_insurance_balance, Wad(40));
+    assert_eq!(result.previous_actual_debt, Wad(400));
+    assert_eq!(result.updated_actual_debt, Wad(340));
+    assert_eq!(result.scaled_debt_delta, ScaledDebt(60));
+}
+
+#[test]
+fn test_account_002_insufficient_liquidity_rejection() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+    apply_liquidity_increase(&mut ledger, &mut reserve, Wad(10), ledger_seq(2)).unwrap();
+
+    let err = apply_liquidity_decrease(&mut ledger, &mut reserve, Wad(11), ledger_seq(3));
+
+    assert_eq!(err, Err(LendingError::InsufficientLiquidity));
+    assert_eq!(reserve.available_liquidity, Wad(10));
+}
+
+#[test]
+fn test_account_002_insufficient_debt_rejection() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+
+    let err = apply_debt_decrease(&mut ledger, &mut reserve, Wad(1), ledger_seq(2));
+
+    assert_eq!(err, Err(LendingError::NoDebtToRepay));
+    assert_eq!(reserve.total_actual_debt, Wad(0));
+}
+
+#[test]
+fn test_account_002_insufficient_scaled_supply_rejection() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+
+    let err = apply_supply_decrease(&mut ledger, &mut reserve, Wad(1), ledger_seq(2));
+
+    assert_eq!(err, Err(LendingError::MathUnderflow));
+    assert_eq!(reserve.total_scaled_supply, ScaledBalance(0));
+}
+
+#[test]
+fn test_account_002_insurance_coverage_limit_rejection() {
+    let (mut ledger, mut reserve) = balanced_bad_debt_state();
+
+    let err = apply_bad_debt_coverage(&mut ledger, &mut reserve, Wad(101), ledger_seq(11));
+
+    assert_eq!(err, Err(LendingError::InsufficientLiquidity));
+    assert_eq!(reserve.bad_debt, Wad(100));
+    assert_eq!(ledger.insurance_fund_balance, Wad(100));
+}
+
+#[test]
+fn test_account_002_overflow_rejection() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+    ledger.total_assets = Wad(i128::MAX);
+    ledger.total_liquidity = Wad(i128::MAX);
+    reserve.total_liquidity = Wad(i128::MAX);
+    reserve.available_liquidity = Wad(i128::MAX);
+
+    let err = apply_liquidity_increase(&mut ledger, &mut reserve, Wad(1), ledger_seq(2));
+
+    assert_eq!(err, Err(LendingError::MathOverflow));
+    assert_eq!(ledger.total_assets, Wad(i128::MAX));
+}
+
+#[test]
+fn test_account_002_accounting_equation_after_composed_operations() {
+    let mut ledger = empty_ledger();
+    let mut reserve = empty_reserve();
+
+    apply_liquidity_increase(&mut ledger, &mut reserve, Wad(1_000), ledger_seq(2)).unwrap();
+    apply_supply_increase(
+        &mut ledger,
+        &mut reserve,
+        Wad(1_000),
+        Some(Wad(2_000)),
+        ledger_seq(2),
+    )
+    .unwrap();
+    assert!(validate_accounting_equation(&ledger).is_ok());
+    assert!(validate_reserve_accounting_equation(&reserve).is_ok());
+
+    apply_liquidity_decrease(&mut ledger, &mut reserve, Wad(300), ledger_seq(3)).unwrap();
+    apply_debt_increase(
+        &mut ledger,
+        &mut reserve,
+        Wad(300),
+        Some(Wad(1_000)),
+        ledger_seq(3),
+    )
+    .unwrap();
+    assert!(validate_accounting_equation(&ledger).is_ok());
+    assert!(validate_reserve_accounting_equation(&reserve).is_ok());
+
+    apply_debt_decrease(&mut ledger, &mut reserve, Wad(125), ledger_seq(4)).unwrap();
+    apply_liquidity_increase(&mut ledger, &mut reserve, Wad(125), ledger_seq(4)).unwrap();
+    assert!(validate_accounting_equation(&ledger).is_ok());
+    assert!(validate_reserve_accounting_equation(&reserve).is_ok());
 }
 
 #[test]
@@ -366,17 +681,31 @@ fn test_storage_helpers() {
         let ledger = AccountingLedger::new(ledger_seq(7));
         let reserve = ReserveAccounting::new(ReserveId(2), ledger_seq(7));
         let record = BadDebtRecord::new(ReserveId(2), Wad(55), ledger_seq(7));
+        let user = Address::generate(&env);
+        let snapshot = UserAccountingSnapshot {
+            user: user.clone(),
+            reserve_id: ReserveId(2),
+            scaled_supply: ScaledBalance(10),
+            scaled_debt: ScaledDebt(3),
+            collateral_enabled: true,
+            last_updated_ledger: ledger_seq(7),
+        };
 
         assert!(!has_accounting_ledger(&env));
         write_accounting_ledger(&env, &ledger);
         write_reserve_accounting(&env, &reserve);
         write_accounting_version(&env, ACCOUNTING_VERSION);
         write_bad_debt_record(&env, &record);
+        write_user_accounting_snapshot(&env, &snapshot);
 
         assert!(has_accounting_ledger(&env));
         assert_eq!(read_accounting_ledger(&env), Some(ledger));
         assert_eq!(read_reserve_accounting(&env, ReserveId(2)), Some(reserve));
         assert_eq!(read_accounting_version(&env), Some(ACCOUNTING_VERSION));
         assert_eq!(read_bad_debt_record(&env, ReserveId(2)), Some(record));
+        assert_eq!(
+            read_user_accounting_snapshot(&env, &user, ReserveId(2)),
+            Some(snapshot)
+        );
     });
 }

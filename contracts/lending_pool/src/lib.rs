@@ -20,13 +20,11 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, Vec, IntoVal,
+    contract, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, IntoVal, Vec,
 };
 use udonfi_common::{
-    bitmap::*,
-    math::*,
-    InterestRateConfig, LendingError, PoolDataKey, ReserveConfig, UserAccountData,
-    HEALTH_FACTOR_LIQUIDATION_THRESHOLD, RAY, WAD, TTL_EXTEND_TO, TTL_THRESHOLD,
+    bitmap::*, math::*, InterestRateConfig, LendingError, PoolDataKey, ReserveConfig,
+    UserAccountData, HEALTH_FACTOR_LIQUIDATION_THRESHOLD, RAY, TTL_EXTEND_TO, TTL_THRESHOLD, WAD,
 };
 
 // ─────────────────────────────────────────────
@@ -76,21 +74,15 @@ impl LendingPoolContract {
             panic!("already initialized");
         }
 
-        env.storage()
-            .instance()
-            .set(&PoolDataKey::Admin, &admin);
-        env.storage()
-            .instance()
-            .set(&PoolDataKey::Oracle, &oracle);
+        env.storage().instance().set(&PoolDataKey::Admin, &admin);
+        env.storage().instance().set(&PoolDataKey::Oracle, &oracle);
         env.storage()
             .instance()
             .set(&PoolDataKey::Treasury, &treasury);
         env.storage()
             .instance()
             .set(&PoolDataKey::ReserveCount, &0u32);
-        env.storage()
-            .instance()
-            .set(&PoolDataKey::Paused, &false);
+        env.storage().instance().set(&PoolDataKey::Paused, &false);
         env.storage()
             .instance()
             .set(&PoolDataKey::Initialized, &true);
@@ -162,10 +154,8 @@ impl LendingPoolContract {
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        env.events().publish(
-            (symbol_short!("reserve"), config.asset),
-            reserve_index,
-        );
+        env.events()
+            .publish((symbol_short!("reserve"), config.asset), reserve_index);
     }
 
     /// Upgrade the contract WASM. Only callable by admin.
@@ -177,9 +167,7 @@ impl LendingPoolContract {
     /// Pause/unpause the protocol. Only callable by admin.
     pub fn set_paused(env: Env, paused: bool) {
         Self::require_admin(&env);
-        env.storage()
-            .instance()
-            .set(&PoolDataKey::Paused, &paused);
+        env.storage().instance().set(&PoolDataKey::Paused, &paused);
     }
 
     /// Register the Liquidation Engine contract address. Only callable by admin.
@@ -236,24 +224,14 @@ impl LendingPoolContract {
 
         // Step 3: Calculate scaled amount
         // scaled_amount = amount * RAY / liquidity_index
-        let amount_ray = (amount as i128)
-            .checked_mul(RAY)
-            .expect("overflow");
+        let amount_ray = (amount as i128).checked_mul(RAY).expect("overflow");
         let scaled_amount = amount_ray / liquidity_index;
 
         // Step 4: Update user's scaled aToken balance
         let balance_key = PoolDataKey::UserATokenBalance(caller.clone(), reserve_index);
-        let current_scaled: i128 = env
-            .storage()
-            .persistent()
-            .get(&balance_key)
-            .unwrap_or(0);
-        let new_scaled = current_scaled
-            .checked_add(scaled_amount)
-            .expect("overflow");
-        env.storage()
-            .persistent()
-            .set(&balance_key, &new_scaled);
+        let current_scaled: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
+        let new_scaled = current_scaled.checked_add(scaled_amount).expect("overflow");
+        env.storage().persistent().set(&balance_key, &new_scaled);
         env.storage()
             .persistent()
             .extend_ttl(&balance_key, TTL_THRESHOLD, TTL_EXTEND_TO);
@@ -275,10 +253,8 @@ impl LendingPoolContract {
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        env.events().publish(
-            (symbol_short!("supply"), caller, asset),
-            amount,
-        );
+        env.events()
+            .publish((symbol_short!("supply"), caller, asset), amount);
     }
 
     /// Withdraw an asset from the lending pool.
@@ -310,11 +286,7 @@ impl LendingPoolContract {
 
         // Get user's actual balance
         let balance_key = PoolDataKey::UserATokenBalance(caller.clone(), reserve_index);
-        let current_scaled: i128 = env
-            .storage()
-            .persistent()
-            .get(&balance_key)
-            .unwrap_or(0);
+        let current_scaled: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
         let actual_balance = ray_mul(current_scaled, liquidity_index).unwrap_or(0);
 
         // Determine withdrawal amount
@@ -329,18 +301,14 @@ impl LendingPoolContract {
         }
 
         // Calculate scaled amount to burn
-        let withdraw_ray = withdraw_amount
-            .checked_mul(RAY)
-            .expect("overflow");
+        let withdraw_ray = withdraw_amount.checked_mul(RAY).expect("overflow");
         let scaled_to_burn = withdraw_ray / liquidity_index;
 
         // Reduce user's scaled balance
         let new_scaled = current_scaled
             .checked_sub(scaled_to_burn)
             .expect("underflow");
-        env.storage()
-            .persistent()
-            .set(&balance_key, &new_scaled);
+        env.storage().persistent().set(&balance_key, &new_scaled);
         env.storage()
             .persistent()
             .extend_ttl(&balance_key, TTL_THRESHOLD, TTL_EXTEND_TO);
@@ -370,20 +338,14 @@ impl LendingPoolContract {
 
         // Transfer asset to user
         let token_client = token::Client::new(&env, &asset);
-        token_client.transfer(
-            &env.current_contract_address(),
-            &caller,
-            &withdraw_amount,
-        );
+        token_client.transfer(&env.current_contract_address(), &caller, &withdraw_amount);
 
         env.storage()
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        env.events().publish(
-            (symbol_short!("wdraw"), caller, asset),
-            withdraw_amount,
-        );
+        env.events()
+            .publish((symbol_short!("wdraw"), caller, asset), withdraw_amount);
     }
 
     /// Borrow an asset from the lending pool.
@@ -426,15 +388,9 @@ impl LendingPoolContract {
 
         // Record the new debt FIRST (for HF simulation)
         let debt_key = PoolDataKey::UserDebtBalance(caller.clone(), reserve_index);
-        let current_debt: i128 = env
-            .storage()
-            .persistent()
-            .get(&debt_key)
-            .unwrap_or(0);
+        let current_debt: i128 = env.storage().persistent().get(&debt_key).unwrap_or(0);
         let new_debt = current_debt.checked_add(scaled_debt).expect("overflow");
-        env.storage()
-            .persistent()
-            .set(&debt_key, &new_debt);
+        env.storage().persistent().set(&debt_key, &new_debt);
         env.storage()
             .persistent()
             .extend_ttl(&debt_key, TTL_THRESHOLD, TTL_EXTEND_TO);
@@ -459,20 +415,14 @@ impl LendingPoolContract {
 
         // Transfer borrowed asset to user
         let token_client = token::Client::new(&env, &asset);
-        token_client.transfer(
-            &env.current_contract_address(),
-            &caller,
-            &amount,
-        );
+        token_client.transfer(&env.current_contract_address(), &caller, &amount);
 
         env.storage()
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        env.events().publish(
-            (symbol_short!("borrow"), caller, asset),
-            amount,
-        );
+        env.events()
+            .publish((symbol_short!("borrow"), caller, asset), amount);
     }
 
     /// Repay a borrowed asset.
@@ -503,11 +453,7 @@ impl LendingPoolContract {
 
         // Get user's actual debt
         let debt_key = PoolDataKey::UserDebtBalance(caller.clone(), reserve_index);
-        let current_scaled_debt: i128 = env
-            .storage()
-            .persistent()
-            .get(&debt_key)
-            .unwrap_or(0);
+        let current_scaled_debt: i128 = env.storage().persistent().get(&debt_key).unwrap_or(0);
 
         if current_scaled_debt == 0 {
             panic!("no debt to repay");
@@ -539,9 +485,7 @@ impl LendingPoolContract {
 
         // Update user's scaled debt
         let new_scaled_debt = current_scaled_debt - actual_burn;
-        env.storage()
-            .persistent()
-            .set(&debt_key, &new_scaled_debt);
+        env.storage().persistent().set(&debt_key, &new_scaled_debt);
         env.storage()
             .persistent()
             .extend_ttl(&debt_key, TTL_THRESHOLD, TTL_EXTEND_TO);
@@ -565,10 +509,8 @@ impl LendingPoolContract {
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        env.events().publish(
-            (symbol_short!("repay"), caller, asset),
-            repay_amount,
-        );
+        env.events()
+            .publish((symbol_short!("repay"), caller, asset), repay_amount);
     }
 
     /// Toggle using an asset as collateral.
@@ -608,11 +550,11 @@ impl LendingPoolContract {
                 // Set temporary bitmap with collateral disabled to simulate health factor
                 let mut temp_bitmap = bitmap;
                 set_using_as_collateral(&mut temp_bitmap, reserve_index as u8, false);
-                
+
                 // Temporarily save bitmap for calculation (calculate_health_factor_internal reads from storage)
                 Self::set_user_bitmap(&env, &caller, temp_bitmap);
                 let hf = Self::calculate_health_factor_internal(&env, &caller);
-                
+
                 // Revert to original bitmap
                 Self::set_user_bitmap(&env, &caller, bitmap);
 
@@ -630,10 +572,8 @@ impl LendingPoolContract {
             .instance()
             .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
 
-        env.events().publish(
-            (symbol_short!("toggle"), caller, asset),
-            use_as_collateral,
-        );
+        env.events()
+            .publish((symbol_short!("toggle"), caller, asset), use_as_collateral);
     }
 
     // ══════════════════════════════════════════
@@ -649,11 +589,7 @@ impl LendingPoolContract {
             .get(&PoolDataKey::ReserveCount)
             .unwrap_or(0);
 
-        let oracle: Address = env
-            .storage()
-            .instance()
-            .get(&PoolDataKey::Oracle)
-            .unwrap();
+        let oracle: Address = env.storage().instance().get(&PoolDataKey::Oracle).unwrap();
 
         let mut total_collateral_usd: i128 = 0;
         let mut total_debt_usd: i128 = 0;
@@ -666,11 +602,7 @@ impl LendingPoolContract {
             // Check collateral
             if is_using_as_collateral(bitmap, i as u8) {
                 let balance_key = PoolDataKey::UserATokenBalance(user.clone(), i);
-                let scaled: i128 = env
-                    .storage()
-                    .persistent()
-                    .get(&balance_key)
-                    .unwrap_or(0);
+                let scaled: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
 
                 if scaled > 0 {
                     let liquidity_index = Self::get_stored_liquidity_index(&env, i);
@@ -690,11 +622,7 @@ impl LendingPoolContract {
             // Check borrows
             if is_borrowing(bitmap, i as u8) {
                 let debt_key = PoolDataKey::UserDebtBalance(user.clone(), i);
-                let scaled: i128 = env
-                    .storage()
-                    .persistent()
-                    .get(&debt_key)
-                    .unwrap_or(0);
+                let scaled: i128 = env.storage().persistent().get(&debt_key).unwrap_or(0);
 
                 if scaled > 0 {
                     let borrow_index = Self::get_stored_borrow_index(&env, i);
@@ -757,21 +685,14 @@ impl LendingPoolContract {
 
     /// Get the Price Oracle adapter contract address.
     pub fn oracle(env: Env) -> Address {
-        env.storage()
-            .instance()
-            .get(&PoolDataKey::Oracle)
-            .unwrap()
+        env.storage().instance().get(&PoolDataKey::Oracle).unwrap()
     }
 
     /// Get user's deposit balance for a specific asset.
     pub fn get_user_deposit(env: Env, user: Address, asset: Address) -> i128 {
         let reserve_index = Self::get_reserve_index(&env, &asset);
         let balance_key = PoolDataKey::UserATokenBalance(user, reserve_index);
-        let scaled: i128 = env
-            .storage()
-            .persistent()
-            .get(&balance_key)
-            .unwrap_or(0);
+        let scaled: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
         let liquidity_index = Self::get_stored_liquidity_index(&env, reserve_index);
         ray_mul(scaled, liquidity_index).unwrap_or(0)
     }
@@ -780,11 +701,7 @@ impl LendingPoolContract {
     pub fn get_user_debt(env: Env, user: Address, asset: Address) -> i128 {
         let reserve_index = Self::get_reserve_index(&env, &asset);
         let debt_key = PoolDataKey::UserDebtBalance(user, reserve_index);
-        let scaled: i128 = env
-            .storage()
-            .persistent()
-            .get(&debt_key)
-            .unwrap_or(0);
+        let scaled: i128 = env.storage().persistent().get(&debt_key).unwrap_or(0);
         let borrow_index = Self::get_stored_borrow_index(&env, reserve_index);
         ray_mul(scaled, borrow_index).unwrap_or(0)
     }
@@ -854,11 +771,7 @@ impl LendingPoolContract {
         // ─────────────────────────────────────────────
         let debt_config = Self::get_reserve_config(&env, debt_index);
         let debt_key = PoolDataKey::UserDebtBalance(borrower.clone(), debt_index);
-        let current_scaled_debt: i128 = env
-            .storage()
-            .persistent()
-            .get(&debt_key)
-            .unwrap_or(0);
+        let current_scaled_debt: i128 = env.storage().persistent().get(&debt_key).unwrap_or(0);
 
         if current_scaled_debt > 0 {
             let repay_ray = debt_to_repay.checked_mul(RAY).expect("overflow");
@@ -870,9 +783,7 @@ impl LendingPoolContract {
             };
 
             let new_scaled_debt = current_scaled_debt - actual_debt_burn;
-            env.storage()
-                .persistent()
-                .set(&debt_key, &new_scaled_debt);
+            env.storage().persistent().set(&debt_key, &new_scaled_debt);
             env.storage()
                 .persistent()
                 .extend_ttl(&debt_key, TTL_THRESHOLD, TTL_EXTEND_TO);
@@ -897,11 +808,8 @@ impl LendingPoolContract {
         // ─────────────────────────────────────────────
         let collateral_config = Self::get_reserve_config(&env, collateral_index);
         let balance_key = PoolDataKey::UserATokenBalance(borrower.clone(), collateral_index);
-        let current_scaled_collateral: i128 = env
-            .storage()
-            .persistent()
-            .get(&balance_key)
-            .unwrap_or(0);
+        let current_scaled_collateral: i128 =
+            env.storage().persistent().get(&balance_key).unwrap_or(0);
 
         if current_scaled_collateral > 0 {
             let seize_ray = collateral_to_seize.checked_mul(RAY).expect("overflow");
@@ -944,11 +852,8 @@ impl LendingPoolContract {
         // it means they are undercollateralized/unbacked.
         // We wipe their outstanding debt and record it as a ReserveDeficit.
         let bitmap = Self::get_user_bitmap(&env, &borrower);
-        let current_scaled_collateral: i128 = env
-            .storage()
-            .persistent()
-            .get(&balance_key)
-            .unwrap_or(0);
+        let current_scaled_collateral: i128 =
+            env.storage().persistent().get(&balance_key).unwrap_or(0);
 
         if current_scaled_collateral == 0 {
             let reserve_count = Self::get_reserve_count(env.clone());
@@ -956,7 +861,8 @@ impl LendingPoolContract {
             for i in 0..reserve_count {
                 if is_using_as_collateral(bitmap, i as u8) {
                     let other_bal_key = PoolDataKey::UserATokenBalance(borrower.clone(), i);
-                    let other_scaled: i128 = env.storage().persistent().get(&other_bal_key).unwrap_or(0);
+                    let other_scaled: i128 =
+                        env.storage().persistent().get(&other_bal_key).unwrap_or(0);
                     if other_scaled > 0 {
                         has_any_collateral = true;
                         break;
@@ -970,22 +876,27 @@ impl LendingPoolContract {
                 for i in 0..reserve_count {
                     if is_borrowing(bitmap, i as u8) {
                         let user_debt_key = PoolDataKey::UserDebtBalance(borrower.clone(), i);
-                        let outstanding_scaled: i128 = env
-                            .storage()
-                            .persistent()
-                            .get(&user_debt_key)
-                            .unwrap_or(0);
+                        let outstanding_scaled: i128 =
+                            env.storage().persistent().get(&user_debt_key).unwrap_or(0);
 
                         if outstanding_scaled > 0 {
                             let r_config = Self::get_reserve_config(&env, i);
                             let borrow_index = Self::get_stored_borrow_index(&env, i);
-                            let actual_bad_debt = ray_mul(outstanding_scaled, borrow_index).unwrap_or(0);
+                            let actual_bad_debt =
+                                ray_mul(outstanding_scaled, borrow_index).unwrap_or(0);
 
                             // Record protocol deficit
                             let deficit_key = PoolDataKey::ReserveDeficit(i);
-                            let current_deficit: i128 = env.storage().persistent().get(&deficit_key).unwrap_or(0);
-                            env.storage().persistent().set(&deficit_key, &(current_deficit + actual_bad_debt));
-                            env.storage().persistent().extend_ttl(&deficit_key, TTL_THRESHOLD, TTL_EXTEND_TO);
+                            let current_deficit: i128 =
+                                env.storage().persistent().get(&deficit_key).unwrap_or(0);
+                            env.storage()
+                                .persistent()
+                                .set(&deficit_key, &(current_deficit + actual_bad_debt));
+                            env.storage().persistent().extend_ttl(
+                                &deficit_key,
+                                TTL_THRESHOLD,
+                                TTL_EXTEND_TO,
+                            );
 
                             // Wipe user's internal debt balance in pool
                             env.storage().persistent().set(&user_debt_key, &0i128);
@@ -994,7 +905,8 @@ impl LendingPoolContract {
                             Self::update_pool_total_borrows(&env, i, outstanding_scaled, false);
 
                             // Burn from external debt token contract
-                            let debt_token_client = DebtTokenClient::new(&env, &r_config.debt_token);
+                            let debt_token_client =
+                                DebtTokenClient::new(&env, &r_config.debt_token);
                             debt_token_client.burn(&borrower, &outstanding_scaled);
 
                             env.events().publish(
@@ -1128,7 +1040,9 @@ impl LendingPoolContract {
         }
 
         // Calculate new indices
-        let borrow_rate_ray = current_borrow_rate.checked_mul(1_000_000_000).expect("rate overflow");
+        let borrow_rate_ray = current_borrow_rate
+            .checked_mul(1_000_000_000)
+            .expect("rate overflow");
         let borrow_multiplier =
             calculate_compounded_interest(borrow_rate_ray, time_delta).unwrap_or(RAY);
         let new_bi = ray_mul(old_bi, borrow_multiplier).unwrap_or(old_bi);
@@ -1143,7 +1057,9 @@ impl LendingPoolContract {
         let supply_rate =
             calculate_supply_rate(current_borrow_rate, utilization, config.reserve_factor)
                 .unwrap_or(0);
-        let supply_rate_ray = supply_rate.checked_mul(1_000_000_000).expect("rate overflow");
+        let supply_rate_ray = supply_rate
+            .checked_mul(1_000_000_000)
+            .expect("rate overflow");
         let supply_multiplier =
             calculate_linear_interest(supply_rate_ray, time_delta).unwrap_or(RAY);
         let new_li = ray_mul(old_li, supply_multiplier).unwrap_or(old_li);
@@ -1152,12 +1068,8 @@ impl LendingPoolContract {
         env.storage()
             .persistent()
             .set(&liquidity_index_key, &new_li);
-        env.storage()
-            .persistent()
-            .set(&borrow_index_key, &new_bi);
-        env.storage()
-            .persistent()
-            .set(&last_ts_key, &current_ts);
+        env.storage().persistent().set(&borrow_index_key, &new_bi);
+        env.storage().persistent().set(&last_ts_key, &current_ts);
 
         // Recalculate borrow rate based on new utilization
         let rate_config: Option<InterestRateConfig> = env
@@ -1179,11 +1091,9 @@ impl LendingPoolContract {
         }
 
         // Extend TTLs
-        env.storage().persistent().extend_ttl(
-            &liquidity_index_key,
-            TTL_THRESHOLD,
-            TTL_EXTEND_TO,
-        );
+        env.storage()
+            .persistent()
+            .extend_ttl(&liquidity_index_key, TTL_THRESHOLD, TTL_EXTEND_TO);
         env.storage()
             .persistent()
             .extend_ttl(&borrow_index_key, TTL_THRESHOLD, TTL_EXTEND_TO);
@@ -1210,10 +1120,7 @@ impl LendingPoolContract {
     /// Pool-level total scaled deposits tracking
     fn read_pool_total_deposits(env: &Env, reserve_index: u32) -> i128 {
         let key = PoolDataKey::ReserveByIndex(reserve_index + 5000);
-        env.storage()
-            .persistent()
-            .get::<_, i128>(&key)
-            .unwrap_or(0)
+        env.storage().persistent().get::<_, i128>(&key).unwrap_or(0)
     }
 
     fn update_pool_total_deposits(env: &Env, reserve_index: u32, delta: i128, increase: bool) {
@@ -1232,10 +1139,7 @@ impl LendingPoolContract {
 
     fn read_pool_total_borrows(env: &Env, reserve_index: u32) -> i128 {
         let key = PoolDataKey::ReserveByIndex(reserve_index + 6000);
-        env.storage()
-            .persistent()
-            .get::<_, i128>(&key)
-            .unwrap_or(0)
+        env.storage().persistent().get::<_, i128>(&key).unwrap_or(0)
     }
 
     fn read_pool_total_borrows_for_asset(env: &Env, asset: &Address) -> i128 {
@@ -1262,9 +1166,9 @@ impl LendingPoolContract {
         let price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
             oracle,
             &soroban_sdk::Symbol::new(env, "get_price_usd"),
-            soroban_sdk::vec![env, asset.clone().into_val(env)]
+            soroban_sdk::vec![env, asset.clone().into_val(env)],
         );
-        
+
         match price_res {
             Ok(Ok(price)) => price,
             _ => {
@@ -1285,11 +1189,7 @@ impl LendingPoolContract {
             .get(&PoolDataKey::ReserveCount)
             .unwrap_or(0);
 
-        let oracle: Address = env
-            .storage()
-            .instance()
-            .get(&PoolDataKey::Oracle)
-            .unwrap();
+        let oracle: Address = env.storage().instance().get(&PoolDataKey::Oracle).unwrap();
 
         let mut total_collateral_threshold_usd: i128 = 0;
         let mut total_debt_usd: i128 = 0;
@@ -1297,11 +1197,7 @@ impl LendingPoolContract {
         for i in 0..reserve_count {
             if is_using_as_collateral(bitmap, i as u8) {
                 let balance_key = PoolDataKey::UserATokenBalance(user.clone(), i);
-                let scaled: i128 = env
-                    .storage()
-                    .persistent()
-                    .get(&balance_key)
-                    .unwrap_or(0);
+                let scaled: i128 = env.storage().persistent().get(&balance_key).unwrap_or(0);
                 if scaled > 0 {
                     let config = Self::get_reserve_config(env, i);
                     let liquidity_index = Self::get_stored_liquidity_index(env, i);
@@ -1316,11 +1212,7 @@ impl LendingPoolContract {
 
             if is_borrowing(bitmap, i as u8) {
                 let debt_key = PoolDataKey::UserDebtBalance(user.clone(), i);
-                let scaled: i128 = env
-                    .storage()
-                    .persistent()
-                    .get(&debt_key)
-                    .unwrap_or(0);
+                let scaled: i128 = env.storage().persistent().get(&debt_key).unwrap_or(0);
                 if scaled > 0 {
                     let config = Self::get_reserve_config(env, i);
                     let borrow_index = Self::get_stored_borrow_index(env, i);

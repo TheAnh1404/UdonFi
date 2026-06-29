@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 1,
+    "address": 2,
     "nonce": 0,
     "mux_id": 0
   },
@@ -457,6 +457,101 @@
                           "i128": "0"
                         }
                       ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 518400
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "UserSnapshot"
+                  },
+                  {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  },
+                  {
+                    "u32": 2
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "collateral_enabled"
+                    },
+                    "val": {
+                      "bool": true
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "last_updated_ledger"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "u32": 7
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "reserve_id"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "u32": 2
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "scaled_debt"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "i128": "3"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "scaled_supply"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "i128": "10"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "user"
+                    },
+                    "val": {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                     }
                   }
                 ]

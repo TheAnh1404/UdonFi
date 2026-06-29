@@ -1,6 +1,6 @@
 # Deployment Diagram
 
-This diagram displays the cloud hosting topology, databases, load balancing, and blockchain interface nodes.
+This diagram shows the MVP testnet deployment topology.
 
 ```mermaid
 graph TB
@@ -8,34 +8,25 @@ graph TB
         Browser[User Browser]
         Freighter[Freighter Wallet Extension]
     end
-    
-    subgraph Cloud Infrastructure (AWS / GCP)
-        LB[Load Balancer]
-        
-        subgraph ECS / Kubernetes Cluster
-            BE_Instance[API Backend Containers]
-            Idx_Instance[Indexer Bot Daemon]
-        end
-        
-        subgraph Database Tier
-            Postgres[(RDS PostgreSQL Master)]
-            Replica[(RDS PostgreSQL Read Replica)]
-            Redis[(Redis Cache Cluster)]
-        end
+
+    subgraph Frontend Hosting
+        FE[Vite React Static App]
     end
-    
-    subgraph Stellar Network
-        RPC_Node[Soroban RPC Endpoint]
+
+    subgraph Stellar Testnet
+        RPC[Soroban RPC Endpoint]
+        Contracts[UdonFi Soroban Contracts]
         Ledger[(Stellar Ledger State)]
+        Expert[Stellar Expert]
     end
-    
-    Browser -->|HTTPS| LB
-    Browser -->|JSON-RPC| RPC_Node
-    LB --> BE_Instance
-    BE_Instance --> Postgres
-    BE_Instance --> Redis
-    Idx_Instance --> RPC_Node
-    Idx_Instance --> Postgres
-    Postgres -->|Replication| Replica
-    RPC_Node <--> Ledger
+
+    Browser -->|HTTPS| FE
+    Browser <--> Freighter
+    FE -->|Read state / submit signed tx| RPC
+    Freighter -->|Signs transactions| FE
+    RPC <--> Contracts
+    Contracts <--> Ledger
+    FE -->|Transaction links| Expert
 ```
+
+Backend containers, event indexers, PostgreSQL, Redis, queues, background workers, checkpoint/replay, and automated liquidation bots are Post-MVP / Future Work.

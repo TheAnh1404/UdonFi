@@ -9,6 +9,11 @@
 **/out/
 **/.next/
 **/target/
+**/.codex-target/
+**/target*/
+
+
+
 
 # Environment files
 .env

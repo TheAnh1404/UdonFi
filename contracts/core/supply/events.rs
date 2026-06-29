@@ -1,10 +1,11 @@
-//! Supply preparation event payloads and Global Event Bus emitters.
+//! Supply event payloads and Global Event Bus emitters.
 
-use crate::model::DepositValidationResult;
+use crate::model::{DepositExecutionResult, DepositValidationResult};
 use soroban_sdk::{contracttype, Address, Env, String, Symbol, TryFromVal, Val};
 use udonfi_shared::{
-    category_symbol, create_event_header, create_event_metadata, empty_event_id, module_symbol,
-    EventCategory, EventMetadata, EventModule, LedgerSequence, ReserveId, Wad,
+    category_symbol, create_event_header, create_event_metadata, emit_standard_event,
+    empty_event_id, module_symbol, EventCategory, EventMetadata, EventModule, LedgerSequence, Ray,
+    ReserveId, ScaledBalance, Wad, SUPPLY_DEPOSIT_COMPLETED,
 };
 
 pub const SUPPLY_DEPOSIT_PREPARED: &str = "supply.deposit.prepared";
@@ -17,7 +18,7 @@ pub struct SupplyDepositPrepared {
     pub amount: Wad,
     pub projected_total_supply: Wad,
     pub supply_cap: Wad,
-    pub required_interest_accrual: bool,
+    pub requires_interest_accrual: bool,
     pub current_ledger: LedgerSequence,
 }
 
@@ -28,6 +29,18 @@ pub struct SupplyDepositRejected {
     pub amount: Wad,
     pub reason_code: u32,
     pub current_ledger: LedgerSequence,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SupplyDepositCompleted {
+    pub actor: Address,
+    pub reserve_id: ReserveId,
+    pub amount: Wad,
+    pub scaled_supply_minted: ScaledBalance,
+    pub supply_index: Ray,
+    pub ledger: LedgerSequence,
+    pub accounting_version: u32,
 }
 
 fn supply_metadata(reserve_id: ReserveId) -> EventMetadata {
@@ -84,7 +97,7 @@ pub fn publish_deposit_prepared(env: &Env, actor: Address, result: DepositValida
             amount: result.amount,
             projected_total_supply: result.projected_total_supply,
             supply_cap: result.supply_cap,
-            required_interest_accrual: result.required_interest_accrual,
+            requires_interest_accrual: result.requires_interest_accrual,
             current_ledger: result.current_ledger,
         },
     );
@@ -108,6 +121,32 @@ pub fn publish_deposit_rejected(
             amount,
             reason_code,
             current_ledger,
+        },
+    );
+}
+
+pub fn publish_deposit_completed(env: &Env, result: &DepositExecutionResult) {
+    let header = create_event_header(
+        env,
+        String::from_str(env, SUPPLY_DEPOSIT_COMPLETED),
+        EventModule::Supply,
+        EventCategory::Accounting,
+        result.actor.clone(),
+        empty_event_id(env),
+        empty_event_id(env),
+    );
+    emit_standard_event(
+        env,
+        header,
+        supply_metadata(result.reserve_id),
+        SupplyDepositCompleted {
+            actor: result.actor.clone(),
+            reserve_id: result.reserve_id,
+            amount: result.amount,
+            scaled_supply_minted: result.scaled_supply_minted,
+            supply_index: result.supply_index,
+            ledger: result.ledger,
+            accounting_version: result.accounting_version,
         },
     );
 }

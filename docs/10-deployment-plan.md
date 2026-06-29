@@ -2,6 +2,14 @@
 
 This document outlines the deployment plan, contract initialization scripts, storage TTL variables, and the launch checklist for UdonFi V2.
 
+The current MVP deployment target is Stellar Testnet through:
+
+```txt
+Frontend -> Freighter -> Soroban RPC -> Smart Contracts -> Stellar Testnet -> Stellar Expert
+```
+
+Backend, indexer, PostgreSQL event sync, liquidation bot, queues, workers, checkpoint/replay, and real-time analytics are not required for the MVP demo.
+
 ## 1. Smart Contract Deployment Sequence
 
 Smart contracts must be deployed in a specific order due to cross-contract dependencies:
@@ -52,14 +60,27 @@ The administrative keys of the protocol are distributed across a 3-of-5 multisig
 
 ---
 
-## 4. Mainnet Launch Checklist
+## 4. MVP Testnet Checklist
+
+- [ ] Contract unit and integration tests pass.
+- [ ] Contracts build to release Wasm.
+- [ ] UdonFi contracts are deployed to Stellar Testnet.
+- [ ] Reserves are initialized with demo caps and risk parameters.
+- [ ] Frontend is configured with Testnet contract IDs and Soroban RPC URL.
+- [ ] Freighter is configured for Stellar Testnet.
+- [ ] Deposit, withdraw, borrow, repay, and manual liquidation demo flow works.
+- [ ] Stellar Expert links open for submitted transaction hashes.
+- [ ] No backend/indexer service is required for the demo.
+
+---
+
+## 5. Mainnet Launch Checklist (Post-MVP / Gated)
 
 Before deploying to the Stellar mainnet, the following tasks must be completed:
 
 - [ ] All smart contract code has passed security audits with no outstanding critical issues.
 - [ ] Gas optimization checks verify that all key transactions use less than 70 million instructions.
 - [ ] Pyth and Band price feeds are deployed and verified on mainnet.
-- [ ] Database schemas are migrated and indexes are applied in the PostgreSQL production environment.
-- [ ] The indexer service is running with process monitors (PM2) and database replication is active.
+- [ ] Post-MVP database/indexer architecture is reviewed if indexed analytics are included.
 - [ ] Multisig participants have verified their hardware wallet connections.
 - [ ] Standard web frontend assets are deployed to decentralized storage networks (e.g., IPFS / Arweave) with DDoS protection.

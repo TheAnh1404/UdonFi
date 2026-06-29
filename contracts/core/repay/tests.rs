@@ -2,14 +2,19 @@
 #![allow(deprecated)]
 
 use crate::{
-    prepare_repay, RepayRequest, VALIDATION_STATUS_ACCOUNTING_VALID,
+    execute_repay, prepare_repay, RepayRequest, VALIDATION_STATUS_ACCOUNTING_VALID,
     VALIDATION_STATUS_AMOUNT_CAPPED, VALIDATION_STATUS_INTEREST_ACCRUAL_REQUIRED,
     VALIDATION_STATUS_REPAY_ALLOWED,
 };
-use soroban_sdk::{contract, contractimpl, testutils::Address as _, Address, Env, String, Symbol};
+use soroban_sdk::{
+    contract, contractimpl,
+    testutils::{Address as _, Events},
+    Address, Env, String, Symbol,
+};
 use udonfi_accounting::{
-    read_reserve_accounting, write_accounting_ledger, write_reserve_accounting,
-    write_user_accounting_snapshot, AccountingLedger, ReserveAccounting, UserAccountingSnapshot,
+    read_accounting_ledger, read_reserve_accounting, read_user_accounting_snapshot,
+    write_accounting_ledger, write_reserve_accounting, write_user_accounting_snapshot,
+    AccountingLedger, ReserveAccounting, UserAccountingSnapshot,
 };
 use udonfi_config_engine::{
     default_validation_config, storage::write_latest_validation_config, ValidationConfig,
@@ -18,7 +23,7 @@ use udonfi_pool_state::{storage::write_pool_state, Pool, ProtocolStatus};
 use udonfi_reserve_registry::{storage::write_reserve, Reserve, ReserveStatus};
 use udonfi_shared::{
     BasisPoints, LedgerSequence, LendingError, Ltv, Ray, ReserveFactor, ReserveId, ScaledBalance,
-    ScaledDebt, Timestamp, Wad, RAY,
+    ScaledDebt, Timestamp, Wad, RAY, REPAY_COMPLETED,
 };
 
 #[contract]
@@ -99,13 +104,32 @@ fn seed_reserve(env: &Env, status: ReserveStatus, last_accrual_ledger: LedgerSeq
 }
 
 fn seed_accounting(env: &Env, total_supply: i128, total_debt: i128, liquidity: i128) {
+    seed_accounting_with_index(
+        env,
+        total_supply,
+        total_debt,
+        liquidity,
+        ScaledDebt(total_debt),
+        Ray(RAY),
+    );
+}
+
+fn seed_accounting_with_index(
+    env: &Env,
+    total_supply: i128,
+    total_debt: i128,
+    liquidity: i128,
+    total_scaled_debt: ScaledDebt,
+    borrow_index: Ray,
+) {
     let mut reserve = ReserveAccounting::new(reserve_id(), ledger(100));
     reserve.total_liquidity = Wad(liquidity);
     reserve.available_liquidity = Wad(liquidity);
     reserve.total_actual_supply = Wad(total_supply);
     reserve.total_scaled_supply = ScaledBalance(total_supply);
     reserve.total_actual_debt = Wad(total_debt);
-    reserve.total_scaled_debt = ScaledDebt(total_debt);
+    reserve.total_scaled_debt = total_scaled_debt;
+    reserve.borrow_index = borrow_index;
     write_reserve_accounting(env, &reserve);
 
     let mut ledger_state = AccountingLedger::new(ledger(100));
@@ -113,7 +137,7 @@ fn seed_accounting(env: &Env, total_supply: i128, total_debt: i128, liquidity: i
     ledger_state.total_liabilities = Wad(total_supply);
     ledger_state.total_liquidity = Wad(liquidity);
     ledger_state.total_scaled_supply = ScaledBalance(total_supply);
-    ledger_state.total_scaled_debt = ScaledDebt(total_debt);
+    ledger_state.total_scaled_debt = total_scaled_debt;
     write_accounting_ledger(env, &ledger_state);
 }
 
@@ -438,5 +462,279 @@ fn test_invalid_accounting_state_rejected_before_execution() {
 
         let err = prepare_repay(&env, &request(user, asset, 10_000));
         assert_eq!(err, Err(LendingError::InvalidAmount));
+    });
+}
+
+#[test]
+fn test_successful_repay_execution() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockRepayContract);
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        let asset = seed_valid_state(&env, user.clone());
+
+        let result = execute_repay(&env, &request(user.clone(), asset, 10_000)).unwrap();
+
+        assert_eq!(result.actor, user.clone());
+        assert_eq!(result.reserve_id, reserve_id());
+        assert_eq!(result.requested_amount, Wad(10_000));
+        assert_eq!(result.actual_repay_amount, Wad(10_000));
+        assert_eq!(result.scaled_debt_burned, ScaledDebt(10_000));
+        assert_eq!(result.borrow_index, Ray(RAY));
+        assert_eq!(result.previous_scaled_debt, ScaledDebt(40_000));
+        assert_eq!(result.updated_scaled_debt, ScaledDebt(30_000));
+        assert_eq!(result.previous_liquidity, Wad(60_000));
+        assert_eq!(result.updated_liquidity, Wad(70_000));
+        assert_eq!(result.ledger, ledger(100));
+        assert_eq!(result.event_name, String::from_str(&env, REPAY_COMPLETED));
+
+        let reserve = read_reserve_accounting(&env, reserve_id()).unwrap();
+        assert_eq!(reserve.total_actual_debt, Wad(30_000));
+        assert_eq!(reserve.total_scaled_debt, ScaledDebt(30_000));
+        assert_eq!(reserve.total_liquidity, Wad(70_000));
+        assert_eq!(reserve.available_liquidity, Wad(70_000));
+
+        let ledger_state = read_accounting_ledger(&env).unwrap();
+        assert_eq!(ledger_state.total_assets, Wad(100_000));
+        assert_eq!(ledger_state.total_liquidity, Wad(70_000));
+        assert_eq!(ledger_state.total_scaled_debt, ScaledDebt(30_000));
+
+        let snapshot = read_user_accounting_snapshot(&env, &user, reserve_id()).unwrap();
+        assert_eq!(snapshot.scaled_debt, ScaledDebt(30_000));
+        assert_eq!(env.events().all().events().len(), 1);
+    });
+}
+
+#[test]
+fn test_partial_repay_execution() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockRepayContract);
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        let asset = seed_valid_state(&env, user.clone());
+
+        let result = execute_repay(&env, &request(user.clone(), asset, 15_000)).unwrap();
+
+        assert_eq!(result.actual_repay_amount, Wad(15_000));
+        assert_eq!(result.scaled_debt_burned, ScaledDebt(15_000));
+        assert_eq!(result.updated_scaled_debt, ScaledDebt(25_000));
+        assert_eq!(result.updated_liquidity, Wad(75_000));
+        assert_eq!(
+            read_user_accounting_snapshot(&env, &user, reserve_id())
+                .unwrap()
+                .scaled_debt,
+            ScaledDebt(25_000)
+        );
+    });
+}
+
+#[test]
+fn test_full_repay_execution() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockRepayContract);
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        let asset = seed_valid_state(&env, user.clone());
+
+        let result = execute_repay(&env, &request(user.clone(), asset, 40_000)).unwrap();
+
+        assert_eq!(result.actual_repay_amount, Wad(40_000));
+        assert_eq!(result.scaled_debt_burned, ScaledDebt(40_000));
+        assert_eq!(result.updated_scaled_debt, ScaledDebt(0));
+        assert_eq!(result.updated_liquidity, Wad(100_000));
+
+        let reserve = read_reserve_accounting(&env, reserve_id()).unwrap();
+        assert_eq!(reserve.total_actual_debt, Wad(0));
+        assert_eq!(reserve.total_scaled_debt, ScaledDebt(0));
+        assert_eq!(
+            read_user_accounting_snapshot(&env, &user, reserve_id())
+                .unwrap()
+                .scaled_debt,
+            ScaledDebt(0)
+        );
+    });
+}
+
+#[test]
+fn test_execute_over_repay_capped() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockRepayContract);
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        let asset = seed_valid_state(&env, user.clone());
+
+        let result = execute_repay(&env, &request(user.clone(), asset, 100_000)).unwrap();
+
+        assert_eq!(result.requested_amount, Wad(100_000));
+        assert_eq!(result.actual_repay_amount, Wad(40_000));
+        assert_eq!(result.scaled_debt_burned, ScaledDebt(40_000));
+        assert_eq!(result.updated_scaled_debt, ScaledDebt(0));
+        assert_eq!(
+            read_user_accounting_snapshot(&env, &user, reserve_id())
+                .unwrap()
+                .scaled_debt,
+            ScaledDebt(0)
+        );
+    });
+}
+
+#[test]
+fn test_execute_no_debt_rejected() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockRepayContract);
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        let asset = seed_valid_state(&env, user.clone());
+        seed_user(&env, user.clone(), 100_000, 0);
+        let before_reserve = read_reserve_accounting(&env, reserve_id()).unwrap();
+        let before_ledger = read_accounting_ledger(&env).unwrap();
+        let before_user = read_user_accounting_snapshot(&env, &user, reserve_id()).unwrap();
+
+        let err = execute_repay(&env, &request(user.clone(), asset, 10_000));
+
+        assert_eq!(err, Err(LendingError::NoDebtToRepay));
+        assert_eq!(
+            read_reserve_accounting(&env, reserve_id()).unwrap(),
+            before_reserve
+        );
+        assert_eq!(read_accounting_ledger(&env).unwrap(), before_ledger);
+        assert_eq!(
+            read_user_accounting_snapshot(&env, &user, reserve_id()).unwrap(),
+            before_user
+        );
+        assert_eq!(env.events().all().events().len(), 0);
+    });
+}
+
+#[test]
+fn test_scaled_debt_decreases_with_indexed_debt() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockRepayContract);
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        seed_pool(&env, ProtocolStatus::Active);
+        seed_config(&env, 1, 1_000_000);
+        let asset = seed_reserve(&env, ReserveStatus::Active, ledger(100));
+        seed_accounting_with_index(
+            &env,
+            100_000,
+            80_000,
+            20_000,
+            ScaledDebt(40_000),
+            Ray(RAY * 2),
+        );
+        seed_user(&env, user.clone(), 100_000, 40_000);
+
+        let result = execute_repay(&env, &request(user.clone(), asset, 10_000)).unwrap();
+
+        assert_eq!(result.scaled_debt_burned, ScaledDebt(5_000));
+        assert_eq!(result.previous_scaled_debt, ScaledDebt(40_000));
+        assert_eq!(result.updated_scaled_debt, ScaledDebt(35_000));
+        assert_eq!(
+            read_user_accounting_snapshot(&env, &user, reserve_id())
+                .unwrap()
+                .scaled_debt,
+            ScaledDebt(35_000)
+        );
+    });
+}
+
+#[test]
+fn test_liquidity_increases_on_repay() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockRepayContract);
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        let asset = seed_valid_state(&env, user.clone());
+
+        let result = execute_repay(&env, &request(user, asset, 1_000)).unwrap();
+
+        assert_eq!(result.previous_liquidity, Wad(60_000));
+        assert_eq!(result.updated_liquidity, Wad(61_000));
+        let reserve = read_reserve_accounting(&env, reserve_id()).unwrap();
+        assert_eq!(reserve.total_liquidity, Wad(61_000));
+        assert_eq!(reserve.available_liquidity, Wad(61_000));
+    });
+}
+
+#[test]
+fn test_full_repay_rounding_does_not_create_negative_debt() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockRepayContract);
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        seed_pool(&env, ProtocolStatus::Active);
+        seed_config(&env, 1, 1_000_000);
+        let asset = seed_reserve(&env, ReserveStatus::Active, ledger(100));
+        seed_accounting_with_index(&env, 100, 2, 98, ScaledDebt(1), Ray(RAY * 3 / 2));
+        seed_user(&env, user.clone(), 100, 1);
+
+        let result = execute_repay(&env, &request(user.clone(), asset, 100)).unwrap();
+
+        assert_eq!(result.actual_repay_amount, Wad(2));
+        assert_eq!(result.scaled_debt_burned, ScaledDebt(1));
+        assert_eq!(result.updated_scaled_debt, ScaledDebt(0));
+
+        let reserve = read_reserve_accounting(&env, reserve_id()).unwrap();
+        assert_eq!(reserve.total_actual_debt, Wad(0));
+        assert_eq!(reserve.total_scaled_debt, ScaledDebt(0));
+        assert_eq!(
+            read_user_accounting_snapshot(&env, &user, reserve_id())
+                .unwrap()
+                .scaled_debt,
+            ScaledDebt(0)
+        );
+    });
+}
+
+#[test]
+fn test_repay_completed_event_emitted() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockRepayContract);
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        let asset = seed_valid_state(&env, user.clone());
+
+        let result = execute_repay(&env, &request(user, asset, 1_000)).unwrap();
+
+        assert_eq!(result.event_name, String::from_str(&env, REPAY_COMPLETED));
+        assert_eq!(env.events().all().events().len(), 1);
+    });
+}
+
+#[test]
+fn test_validation_failure_prevents_execution() {
+    let env = Env::default();
+    let contract_id = env.register_contract(None, MockRepayContract);
+
+    env.as_contract(&contract_id, || {
+        let user = Address::generate(&env);
+        let asset = seed_valid_state(&env, user.clone());
+        let before_reserve = read_reserve_accounting(&env, reserve_id()).unwrap();
+        let before_ledger = read_accounting_ledger(&env).unwrap();
+        let before_user = read_user_accounting_snapshot(&env, &user, reserve_id()).unwrap();
+
+        let err = execute_repay(&env, &request(user.clone(), asset, 0));
+
+        assert_eq!(err, Err(LendingError::InvalidAmount));
+        assert_eq!(
+            read_reserve_accounting(&env, reserve_id()).unwrap(),
+            before_reserve
+        );
+        assert_eq!(read_accounting_ledger(&env).unwrap(), before_ledger);
+        assert_eq!(
+            read_user_accounting_snapshot(&env, &user, reserve_id()).unwrap(),
+            before_user
+        );
+        assert_eq!(env.events().all().events().len(), 0);
     });
 }

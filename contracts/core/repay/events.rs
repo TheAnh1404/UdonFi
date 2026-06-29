@@ -1,10 +1,11 @@
 //! Repay event payloads and Global Event Bus emitters.
 
-use crate::model::RepayValidationResult;
+use crate::model::{RepayExecutionResult, RepayValidationResult};
 use soroban_sdk::{contracttype, Address, Env, Symbol, TryFromVal, Val};
 use udonfi_shared::{
-    category_symbol, create_event_header, create_event_metadata, empty_event_id, module_symbol,
-    EventCategory, EventMetadata, EventModule, LedgerSequence, ReserveId, ScaledDebt, Wad,
+    category_symbol, create_event_header, create_event_metadata, emit_standard_event,
+    empty_event_id, module_symbol, EventCategory, EventMetadata, EventModule, LedgerSequence, Ray,
+    ReserveId, ScaledDebt, Wad, REPAY_COMPLETED,
 };
 
 pub const REPAY_PREPARED: &str = "repay.prepared";
@@ -29,6 +30,18 @@ pub struct RepayRejected {
     pub requested_amount: Wad,
     pub reason_code: u32,
     pub current_ledger: LedgerSequence,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RepayCompleted {
+    pub actor: Address,
+    pub reserve_id: ReserveId,
+    pub requested_amount: Wad,
+    pub actual_repay_amount: Wad,
+    pub scaled_debt_burned: ScaledDebt,
+    pub borrow_index: Ray,
+    pub ledger: LedgerSequence,
 }
 
 fn repay_metadata(reserve_id: ReserveId) -> EventMetadata {
@@ -115,6 +128,32 @@ pub fn publish_repay_rejected(
             requested_amount,
             reason_code,
             current_ledger,
+        },
+    );
+}
+
+pub fn publish_repay_completed(env: &Env, result: &RepayExecutionResult) {
+    let header = create_event_header(
+        env,
+        soroban_sdk::String::from_str(env, REPAY_COMPLETED),
+        EventModule::Repay,
+        EventCategory::Accounting,
+        result.actor.clone(),
+        result.event_id.clone(),
+        result.event_id.clone(),
+    );
+    emit_standard_event(
+        env,
+        header,
+        repay_metadata(result.reserve_id),
+        RepayCompleted {
+            actor: result.actor.clone(),
+            reserve_id: result.reserve_id,
+            requested_amount: result.requested_amount,
+            actual_repay_amount: result.actual_repay_amount,
+            scaled_debt_burned: result.scaled_debt_burned,
+            borrow_index: result.borrow_index,
+            ledger: result.ledger,
         },
     );
 }

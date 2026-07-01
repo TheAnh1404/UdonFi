@@ -41,7 +41,7 @@ Initializes reserve parameters (LTV, liquidation thresholds, borrow caps) for ne
   ```
 
 ### C. Oracle Update Feeder (`update_oracle_prices.js`)
-Feeds real-time prices to mock oracle instances during testnet sandbox operations.
+Configures demo price values for testnet sandbox operations.
 - **Execution**:
   ```bash
   node scripts/update_oracle_prices.js --network testnet

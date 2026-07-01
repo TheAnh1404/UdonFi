@@ -87,7 +87,7 @@ export const PoolsPage: React.FC<PoolsPageProps> = ({
 
     // 2. Compute Cumulative TVL over time
     const tvlChartPoints = React.useMemo(() => {
-        let baseTvl = 550000;
+        const baseTvl = 550000;
         const sortedTxs = [...txHistory].reverse();
         const dataPoints: { time: string; tvl: number }[] = [];
         
@@ -111,7 +111,8 @@ export const PoolsPage: React.FC<PoolsPageProps> = ({
 
         while (dataPoints.length < 6) {
             const prevPoint = dataPoints[dataPoints.length - 1] || { time: 'Base', tvl: baseTvl };
-            const randomChange = (Math.random() - 0.3) * 15000; 
+            const pseudoRandom = ((dataPoints.length * 9301 + 49297) % 233280) / 233280;
+            const randomChange = (pseudoRandom - 0.3) * 15000; 
             dataPoints.push({
                 time: `T-${6 - dataPoints.length}`,
                 tvl: Math.max(100000, prevPoint.tvl + randomChange)

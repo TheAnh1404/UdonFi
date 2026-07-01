@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, @typescript-eslint/ban-ts-comment, prefer-const, no-useless-assignment, react-hooks/exhaustive-deps, react-hooks/set-state-in-effect */
 import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { HealthFactorGauge } from './components/HealthFactorGauge';

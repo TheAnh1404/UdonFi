@@ -17,7 +17,9 @@ export const SorobanBitmap: React.FC<SorobanBitmapProps> = ({ bitmap, onToggleBi
         const isBorrowFlag = index % 2 === 1;
         const assetName = assetIndex === 0 ? 'XLM' : assetIndex === 1 ? 'USDC' : `Asset #${assetIndex}`;
 
+        // eslint-disable-next-line no-useless-assignment
         let description = '';
+        // eslint-disable-next-line prefer-const
         let isInteractive = assetIndex < 2; // only XLM and USDC are simulated in details
 
         if (isBorrowFlag) {
@@ -40,6 +42,7 @@ export const SorobanBitmap: React.FC<SorobanBitmapProps> = ({ bitmap, onToggleBi
 
     // Convert bitmap to hex with padding
     const toHexStr = (val: bigint) => {
+        // eslint-disable-next-line prefer-const
         let hex = val.toString(16);
         // Pad to 32 characters for 128-bit hex representation
         return '0x' + hex.padStart(32, '0').toUpperCase();

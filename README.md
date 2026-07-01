@@ -1,131 +1,163 @@
 # UdonFi V2 - Soroban Lending MVP
 
-UdonFi V2 is a Stellar Soroban lending protocol. The current MVP is a contract-first demo that runs through a React frontend, Freighter wallet signatures, Soroban RPC reads/writes, Stellar Testnet, and Stellar Expert transaction links.
+UdonFi V2 is a Stellar Soroban lending protocol MVP for a contract-first Testnet demo. The demo path is React frontend, Freighter wallet, Soroban RPC, UdonFi Soroban contracts, Stellar Testnet, and Stellar Expert transaction links.
 
-The MVP does not require an event indexer, liquidation bot, backend analytics service, PostgreSQL sync pipeline, queue system, or background workers.
+The project is demo/testnet only. It is not mainnet-ready.
 
-## Current MVP Scope
+## MVP Status
 
-- Soroban smart contracts.
-- Frontend direct contract interaction.
-- Freighter wallet connection and transaction signing.
-- Soroban RPC reads and writes.
-- Deposit.
-- Withdraw.
-- Borrow.
-- Repay.
-- Basic Health Factor.
-- Manual liquidation callable by a user or liquidator.
-- Stellar Expert transaction links after transaction submission.
-- Basic contract events for debugging and Stellar Explorer visibility.
+- Smart contract MVP: initialize, reserve creation, deposit, withdraw, borrow, repay, interest, health factor, and manual liquidation.
+- Deployment preparation: Testnet deploy, initialize, and verify scripts under `contracts/scripts/`.
+- Frontend MVP: Freighter connection, contract ID environment loading, Soroban RPC transaction submission, transaction hash display, and Stellar Expert links.
 
-## Explicitly Out of MVP Scope
+Out of scope for this MVP:
 
-- Event Indexer.
-- Liquidation Bot.
-- Analytics Backend.
-- PostgreSQL Event Sync.
-- Real-time Dashboard Pipeline.
-- Background Workers.
-- Queue system.
-- Sync lag strategy.
-- Indexer checkpoint and replay system.
-
-## New MVP Architecture
-
-```text
-React Frontend
-    |
-Freighter Wallet
-    |
-Soroban RPC
-    |
-UdonFi Soroban Smart Contracts
-    |
-Stellar Testnet
-    |
-Stellar Expert transaction links
-```
-
-```mermaid
-graph TD
-    User([User / Manual Liquidator]) --> FE[React Frontend]
-    FE --> Wallet[Freighter Wallet]
-    Wallet --> FE
-    FE --> RPC[Soroban RPC]
-    RPC --> SC[UdonFi Soroban Smart Contracts]
-    SC --> Testnet[Stellar Testnet]
-    FE --> Expert[Stellar Expert Tx Link]
-```
-
-## Post-MVP / Future Work
-
-The following work remains useful but is not required for the MVP demo:
-
-- Event indexer and event replay pipeline.
-- Liquidation monitoring bot.
-- Backend analytics API.
-- PostgreSQL event sync and single-writer policies.
-- Real-time dashboard WebSocket pipeline.
-- Sync lag detection and degraded UI modes.
-- Queue/backpressure/checkpoint systems.
-
-Future-work notes live under [docs/future-work](docs/future-work/).
+- Off-chain automation services.
+- Off-chain analytics services.
+- Production oracle aggregation.
+- Governance.
+- Mainnet deployment.
 
 ## Repository Layout
 
 ```text
-contracts/      Soroban smart contracts and core MVP modules
-frontend/       React frontend for direct Soroban RPC + Freighter flows
-docs/           Protocol, architecture, roadmap, and project docs
-tests/          Contract and MVP integration test docs/tests
-backend/        Optional Post-MVP analytics/caching service plan
-indexer/        Optional Post-MVP event indexer plan
-indexer_bot/    Legacy/Post-MVP bot and indexer experiments
-diagrams/       Architecture and flow diagrams
+contracts/      Soroban smart contracts, deployment scripts, contract env template
+frontend/       React app for direct Freighter + Soroban RPC flows
+deployments/    Testnet deployment output template
+docs/           Protocol and demo documentation
+scripts/        Repository helper notes
 ```
 
-## Development Commands
+## Environment Setup
 
-Run contract tests:
+Create contract deployment env:
+
+```bash
+cp contracts/.env.example contracts/.env
+```
+
+Set `DEPLOYER_SECRET_KEY` in `contracts/.env`. Do not commit real secret keys.
+
+Create frontend env manually or let `contracts/scripts/deploy-testnet.sh` generate `frontend/.env.local` after deployment:
+
+```bash
+cp frontend/.env.example frontend/.env.local
+```
+
+Required contract/frontend values:
+
+```text
+SOROBAN_RPC_URL
+SOROBAN_NETWORK_PASSPHRASE
+DEPLOYER_SECRET_KEY
+LENDING_POOL_CONTRACT_ID
+A_TOKEN_CONTRACT_ID
+DEBT_TOKEN_CONTRACT_ID
+RESERVE_CONTRACT_ID
+PRICE_ORACLE_CONTRACT_ID
+LIQUIDATION_CONTRACT_ID
+STELLAR_EXPERT_BASE_URL
+```
+
+Frontend variables use the same names with the `VITE_` prefix.
+
+## Contract Commands
 
 ```bash
 cd contracts
+cargo build --target wasm32v1-none --release
 cargo test
+cargo fmt -- --check
+cargo clippy --all-targets -- -D warnings
 ```
 
-Run frontend locally:
+## Testnet Deployment
+
+The scripts require the Stellar CLI, Rust toolchain, `wasm32v1-none` target, and a funded Testnet deployer secret key.
+
+```bash
+cd contracts
+bash scripts/deploy-testnet.sh
+bash scripts/init-testnet.sh
+bash scripts/verify-testnet.sh
+```
+
+`deploy-testnet.sh` builds and deploys:
+
+- `lending_pool`
+- `a_token`
+- `debt_token`
+- `reserve`
+- `price_oracle`
+- `liquidation`
+
+It writes:
+
+- `deployments/testnet.json`
+- `contracts/.env.local`
+- `frontend/.env.local`
+
+`init-testnet.sh` initializes the oracle, pool, liquidation engine, XLM aToken, XLM debtToken, XLM reserve, and initial XLM demo price.
+
+`verify-testnet.sh` reads contract state to confirm the pool, oracle, reserve, and liquidation engine are callable.
+
+## Frontend Commands
 
 ```bash
 cd frontend
 npm install
 npm run dev
-```
-
-Build frontend:
-
-```bash
-cd frontend
 npm run build
+npm run lint
 ```
 
-The root `package.json` has no MVP scripts. Backend/indexer packages are not required to run the MVP demo.
+The frontend reads contract IDs from `frontend/.env.local`, connects to Freighter, builds Soroban transactions through RPC, signs through Freighter, submits to Testnet, polls confirmation, and renders Stellar Expert transaction links.
 
-## Documentation
+## Stellar Expert Verification
 
-- [Overview](docs/00-overview.md)
-- [System Architecture](docs/02-system-architecture.md)
-- [C4 Model](docs/03-c4-model.md)
-- [Business Flows](docs/04-business-flows.md)
-- [API Spec](docs/06-api-spec.md)
-- [Security Model](docs/08-security-model.md)
-- [Roadmap](docs/12-roadmap.md)
-- [Performance Budget](docs/21-performance-budget.md)
-- [MVP Scope Refactor Report](docs/reviews/mvp-scope-refactor-report.md)
+The frontend uses:
 
-## Status
+```text
+https://stellar.expert/explorer/testnet
+```
 
-UdonFi V2 MVP scope is simplified to a contract + frontend + Freighter + Soroban RPC demo. It is not production-ready and is not approved for mainnet.
+Transaction links are generated as:
+
+```text
+https://stellar.expert/explorer/testnet/tx/<transaction_hash>
+```
+
+Contract links are generated as:
+
+```text
+https://stellar.expert/explorer/testnet/contract/<contract_id>
+```
+
+## Demo Flow
+
+See [docs/demo/demo-script.md](docs/demo/demo-script.md).
+
+Short flow:
+
+1. Open the frontend.
+2. Connect Freighter on Testnet.
+3. Confirm contract IDs are loaded.
+4. Deposit XLM.
+5. Open the transaction on Stellar Expert.
+6. Borrow XLM.
+7. Show Health Factor.
+8. Repay.
+9. Withdraw.
+10. Optionally prepare and execute manual liquidation.
+
+## Known Limitations
+
+- No off-chain automation service.
+- No off-chain analytics service.
+- No production oracle aggregation.
+- Not mainnet-ready.
+- Demo/testnet only.
+- The default deployment initialization configures a single XLM reserve for the MVP path.
 
 ## License
 

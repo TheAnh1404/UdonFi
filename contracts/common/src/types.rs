@@ -3,7 +3,7 @@
 //! These types are used across all contracts for consistent
 //! storage key definitions, reserve configuration, and user state.
 
-use soroban_sdk::{contracttype, Address, Symbol};
+use soroban_sdk::{contracttype, Address};
 
 // ─────────────────────────────────────────────
 // Storage Keys

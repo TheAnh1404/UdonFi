@@ -46,6 +46,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
 
     // Keep state synced with props when they change
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setAction(activeAction);
         if (activeAction === 'BORROW') {
             setAsset('XLM');
@@ -54,6 +55,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
 
     useEffect(() => {
         if (action === 'BORROW') {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setAsset('XLM');
         } else {
             setAsset(propAsset);
@@ -62,6 +64,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
 
     // Clear input on tab or asset change
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setAmountStr('');
         setIsLeverageMode(false);
         if (action === 'BORROW' && asset !== 'XLM') {

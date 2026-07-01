@@ -6,7 +6,7 @@ UdonFi is a Stellar Soroban lending protocol. The current MVP is simplified to a
 React Frontend -> Freighter Wallet -> Soroban RPC -> UdonFi Soroban Smart Contracts -> Stellar Testnet -> Stellar Expert
 ```
 
-Backend, event indexer, liquidation bot, PostgreSQL event sync, analytics pipeline, queue, worker, checkpoint/replay, and sync lag strategy are Post-MVP / Future Work.
+Off-chain services, analytics pipelines, and production monitoring are outside the current demo path.
 
 ## Architecture & Project Structure
 
@@ -21,8 +21,7 @@ Backend, event indexer, liquidation bot, PostgreSQL event sync, analytics pipeli
   - Reads directly from Soroban RPC.
   - Writes through Freighter-signed transactions.
   - Shows Stellar Expert links after transaction submission.
-- `backend/`, `indexer/`, and `indexer_bot/`: Post-MVP / Future Work.
-- `docs/future-work/`: Preserved plans for indexer, bot, and backend analytics.
+- `docs/archive/`: Preserved historical planning, review, and future-work material.
 
 ## Key Commands
 
@@ -39,7 +38,7 @@ Backend, event indexer, liquidation bot, PostgreSQL event sync, analytics pipeli
 - Build: `npm run build`
 - Lint: `npm run lint`
 
-Backend/indexer/bot commands are not required for MVP setup, tests, or demo.
+Off-chain service commands are not required for MVP setup, tests, or demo.
 
 ## Development Guidelines
 
@@ -47,10 +46,10 @@ Backend/indexer/bot commands are not required for MVP setup, tests, or demo.
 - Use checked integer arithmetic and fixed-point helpers; no floating point math in contracts.
 - Keep events for debugging and Stellar Explorer visibility.
 - Frontend balances, debt, Health Factor, and liquidation state must come from Soroban RPC/on-chain state for MVP.
-- Do not add backend/indexer/bot dependencies to the MVP demo path.
+- Do not add off-chain service dependencies to the MVP demo path.
 
 ## References
 
 - `README.md`: Current MVP scope and commands.
 - `docs/02-system-architecture.md`: Current architecture.
-- `docs/future-work/`: Post-MVP indexer, bot, and analytics plans.
+- `docs/archive/`: Historical planning and review material.

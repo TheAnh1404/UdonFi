@@ -11,7 +11,7 @@ This release introduces the technical design and architectural specifications fo
 
 ### Added
 - **Modular Smart Contract Spec**: Redesigned the monolithic router into decoupled contracts: `lending_pool`, `reserve_config`, `risk_engine`, `interest_rate_engine`, `liquidation_coordinator`, `price_oracle_aggregator`, and `governance`.
-- **PostgreSQL Database Schema**: Added database schemas replacing Firebase Firestore to ensure transactional integrity and complex querying for analytics.
+- **Analytics Data Schema**: Added historical analytics schema notes for transactional integrity and complex querying.
 - **Multi-Oracle Aggregator Architecture**: Spec for combining Pyth, Band, and a custom fallback oracle to prevent oracle-manipulation attacks.
 - **Decentralized Governance Specs**: Detailed proposal lifecycles, voting delays, timelocks, and token voting mechanics.
 - **Enterprise Testing Suite Design**: Testing spec outlining unit, integration, contract, property, fuzz, load, and security testing requirements.
@@ -25,4 +25,4 @@ This release introduces the technical design and architectural specifications fo
 - **2-Step Liquidation**: Bypassing Soroban 100M instruction VM limits via prepare and execute phases.
 - **TTL Extension**: Automated contract storage extension.
 - **React Frontend**: Glassmorphism and Neon-styled Web3 UI with interactive SVG APY curves and LED state display.
-- **Indexer Bot**: Event parser decoding on-chain events to Firebase Firestore and Socket.io.
+- **Legacy Event Parser**: Event parsing experiment for Firebase Firestore and Socket.io.

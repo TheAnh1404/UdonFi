@@ -9,9 +9,10 @@
 //! - **Normalized output**: All prices returned in WAD (10^18) precision as USD values
 
 #![no_std]
+#![allow(deprecated)]
 
 use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, Address, Env, Symbol};
-use udonfi_common::{LendingError, OracleDataKey, TTL_EXTEND_TO, TTL_THRESHOLD, WAD};
+use udonfi_common::{OracleDataKey, TTL_EXTEND_TO, TTL_THRESHOLD};
 
 #[contracttype]
 #[derive(Clone)]
@@ -286,6 +287,7 @@ impl PriceOracleContract {
 mod test {
     use super::*;
     use soroban_sdk::{testutils::Address as _, Env};
+    use udonfi_common::WAD;
 
     #[test]
     fn test_set_and_get_price() {

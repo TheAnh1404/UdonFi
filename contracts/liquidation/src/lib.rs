@@ -21,12 +21,13 @@
 //! socialization across the insurance fund.
 
 #![no_std]
+#![allow(deprecated)]
 
 use soroban_sdk::{contract, contractimpl, symbol_short, token, Address, BytesN, Env, IntoVal};
 use udonfi_common::{
-    bitmap::*, math::*, LendingError, LiquidationDataKey, LiquidationParams, PoolDataKey,
-    ReserveConfig, HEALTH_FACTOR_LIQUIDATION_THRESHOLD, LIQUIDATION_SESSION_MAX_AGE, RAY,
-    TTL_EXTEND_TO, TTL_THRESHOLD, WAD,
+    math::*, LiquidationDataKey, LiquidationParams, ReserveConfig,
+    HEALTH_FACTOR_LIQUIDATION_THRESHOLD, LIQUIDATION_SESSION_MAX_AGE, TTL_EXTEND_TO, TTL_THRESHOLD,
+    WAD,
 };
 
 #[contract]
@@ -291,8 +292,9 @@ impl LiquidationContract {
                 params.collateral_to_seize.into_val(&env),
             ],
         );
-        if pool_res.is_err() {
-            panic!("liquidation pool hook failed");
+        match pool_res {
+            Ok(Ok(())) => {}
+            _ => panic!("liquidation pool hook failed"),
         }
 
         // Clean up session
@@ -365,7 +367,7 @@ mod test {
 
     #[contractimpl]
     impl MockPoolContract {
-        pub fn get_health_factor(env: Env, _user: Address) -> i128 {
+        pub fn get_health_factor(_env: Env, _user: Address) -> i128 {
             WAD / 2 // 0.5 (under 1.0)
         }
         pub fn get_reserve_info(env: Env, asset: Address) -> ReserveConfig {
@@ -386,7 +388,7 @@ mod test {
         pub fn oracle(env: Env) -> Address {
             Address::generate(&env)
         }
-        pub fn get_user_deposit(env: Env, _user: Address, _asset: Address) -> i128 {
+        pub fn get_user_deposit(_env: Env, _user: Address, _asset: Address) -> i128 {
             100_000
         }
         pub fn liquidation_hook(

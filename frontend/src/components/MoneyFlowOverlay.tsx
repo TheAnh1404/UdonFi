@@ -36,11 +36,6 @@ export function MoneyFlowOverlay() {
             const { type, asset, amount } = customEvent.detail;
             
             // 1. Determine Source and Target Coordinates
-            let sourceX = window.innerWidth / 2;
-            let sourceY = window.innerHeight - 100; // Default action button area
-            let targetX = window.innerWidth / 2;
-            let targetY = window.innerHeight / 2;  // Center screen
-            
             const walletEl = document.getElementById('header-wallet-area');
             const xlmPoolEl = document.getElementById('pool-card-xlm');
             const usdcPoolEl = document.getElementById('pool-card-usdc');
@@ -67,18 +62,8 @@ export function MoneyFlowOverlay() {
             // SUPPLY / REPAY: Wallet -> Pool
             // WITHDRAW / BORROW / LIQUIDATION: Pool -> Wallet
             const isWalletToPool = type === 'SUPPLY' || type === 'REPAY' || type === 'LEVERAGE';
-            
-            if (isWalletToPool) {
-                sourceX = walletPos.x;
-                sourceY = walletPos.y;
-                targetX = activePoolPos.x;
-                targetY = activePoolPos.y;
-            } else {
-                sourceX = activePoolPos.x;
-                sourceY = activePoolPos.y;
-                targetX = walletPos.x;
-                targetY = walletPos.y;
-            }
+            const source = isWalletToPool ? walletPos : activePoolPos;
+            const target = isWalletToPool ? activePoolPos : walletPos;
             
             // 2. Generate Particles
             const particleCount = 15;
@@ -89,10 +74,10 @@ export function MoneyFlowOverlay() {
             for (let i = 0; i < particleCount; i++) {
                 newParticles.push({
                     id: `p-${Math.random().toString(36).substring(2, 9)}`,
-                    x: sourceX + (Math.random() - 0.5) * 40,
-                    y: sourceY + (Math.random() - 0.5) * 40,
-                    targetX: targetX + (Math.random() - 0.5) * 50,
-                    targetY: targetY + (Math.random() - 0.5) * 50,
+                    x: source.x + (Math.random() - 0.5) * 40,
+                    y: source.y + (Math.random() - 0.5) * 40,
+                    targetX: target.x + (Math.random() - 0.5) * 50,
+                    targetY: target.y + (Math.random() - 0.5) * 50,
                     size: Math.random() * 8 + 6,
                     color: particleColor,
                     symbol: symbolText,

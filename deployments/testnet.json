@@ -1,0 +1,17 @@
+{
+  "network": "testnet",
+  "rpcUrl": "",
+  "networkPassphrase": "",
+  "deployedAt": "",
+  "contracts": {
+    "lendingPool": "",
+    "aToken": "",
+    "debtToken": "",
+    "reserve": "",
+    "priceOracle": "",
+    "liquidation": ""
+  },
+  "stellarExpert": {
+    "baseUrl": "https://stellar.expert/explorer/testnet"
+  }
+}

@@ -1,13 +1,13 @@
 # UdonFi V2 Frontend MVP
 
-The frontend MVP is a React + Vite client that interacts directly with UdonFi Soroban contracts through Soroban RPC and Freighter Wallet. It does not require a backend, event indexer, PostgreSQL sync, WebSocket service, or liquidation bot.
+The frontend MVP is a React + Vite client that interacts directly with UdonFi Soroban contracts through Soroban RPC and Freighter Wallet. It does not require off-chain services for the demo path.
 
 ## MVP Responsibilities
 
 - Connect Freighter Wallet.
 - Validate the user is on Stellar Testnet for demo.
 - Read reserve and user state directly from Soroban RPC.
-- Simulate deposit, withdraw, borrow, repay, and manual liquidation transactions.
+- Preview deposit, withdraw, borrow, repay, and manual liquidation transactions through Soroban RPC before signing.
 - Request Freighter signatures.
 - Submit signed XDR through Soroban RPC.
 - Poll transaction status from Soroban RPC.
@@ -25,17 +25,13 @@ Soroban contract state is the source of truth for:
 - Health Factor inputs.
 - Liquidation eligibility.
 
-The frontend must not depend on an indexer or backend for MVP dashboard correctness.
+The frontend must not depend on off-chain derived data for MVP dashboard correctness.
 
 ## Out of MVP Scope
 
-- Event Indexer.
-- Liquidation Bot.
-- Analytics Backend.
-- PostgreSQL Event Sync.
-- Real-time Dashboard Pipeline.
-- Background Workers.
-- Sync lag strategy.
+- Off-chain automation services.
+- Off-chain analytics services.
+- Production monitoring pipelines.
 
 ## Development
 

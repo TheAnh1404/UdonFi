@@ -1,6 +1,6 @@
 # UdonFi V2 Testing Suite Spec
 
-The MVP test suite validates smart contract behavior and the frontend transaction path without requiring an indexer, backend, liquidation bot, PostgreSQL event sync, queue, worker, checkpoint/replay, or sync lag system.
+The MVP test suite validates smart contract behavior and the frontend transaction path without requiring off-chain services.
 
 ---
 
@@ -15,7 +15,7 @@ The MVP test suite validates smart contract behavior and the frontend transactio
   +----------------------------v------------------------------+
   |                   Contract Integration Tests              |
   |   - Initialize, reserve, deposit, borrow, repay, withdraw |
-  |   - Price shock / mock HF drop / manual liquidation       |
+  |   - Price shock / Health Factor drop / manual liquidation |
   +-----------------------------------------------------------+
                                |
   +----------------------------v------------------------------+
@@ -59,7 +59,7 @@ initialize protocol
 create reserve
 deposit collateral
 borrow
-price shock / mock HF drop
+price shock / Health Factor drop
 manual liquidate
 ```
 
@@ -67,7 +67,7 @@ manual liquidate
 
 - Frontend reads directly from Soroban RPC.
 - Frontend writes through Freighter-signed transactions.
-- Frontend does not require backend/indexer startup.
+- Frontend does not require off-chain service startup.
 - Frontend shows Stellar Expert links for submitted transaction hashes.
 
 ---
@@ -85,4 +85,4 @@ npm run lint
 npm run build
 ```
 
-Post-MVP backend/indexer/bot tests should be added when those systems return to scope.
+Off-chain service tests should be added only when those systems return to scope.

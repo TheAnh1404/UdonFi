@@ -9,7 +9,13 @@ interface HeaderProps {
     onDisconnect: () => void;
     currentView: 'DASHBOARD' | 'MARKET' | 'POOLS' | 'SIMULATOR';
     onNavigate: (view: 'DASHBOARD' | 'MARKET' | 'POOLS' | 'SIMULATOR') => void;
-    notifications: any[];
+    notifications: Array<{
+        id: string;
+        action?: string;
+        title: string;
+        timestamp: string;
+        message: string;
+    }>;
     onClearNotifications: () => void;
     onResetProtocol: () => void;
     autoResetEnabled: boolean;

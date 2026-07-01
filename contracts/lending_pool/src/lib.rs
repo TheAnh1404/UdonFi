@@ -18,13 +18,14 @@
 //! ```
 
 #![no_std]
+#![allow(deprecated)]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, IntoVal, Vec,
+    contract, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env, IntoVal,
 };
 use udonfi_common::{
-    bitmap::*, math::*, InterestRateConfig, LendingError, PoolDataKey, ReserveConfig,
-    UserAccountData, HEALTH_FACTOR_LIQUIDATION_THRESHOLD, RAY, TTL_EXTEND_TO, TTL_THRESHOLD, WAD,
+    bitmap::*, math::*, InterestRateConfig, PoolDataKey, ReserveConfig, UserAccountData,
+    HEALTH_FACTOR_LIQUIDATION_THRESHOLD, RAY, TTL_EXTEND_TO, TTL_THRESHOLD, WAD,
 };
 
 // ─────────────────────────────────────────────
@@ -220,11 +221,11 @@ impl LendingPoolContract {
 
         // Step 2: Transfer asset from user to this contract
         let token_client = token::Client::new(&env, &asset);
-        token_client.transfer(&caller, &env.current_contract_address(), &amount);
+        token_client.transfer(&caller, env.current_contract_address(), &amount);
 
         // Step 3: Calculate scaled amount
         // scaled_amount = amount * RAY / liquidity_index
-        let amount_ray = (amount as i128).checked_mul(RAY).expect("overflow");
+        let amount_ray = amount.checked_mul(RAY).expect("overflow");
         let scaled_amount = amount_ray / liquidity_index;
 
         // Step 4: Update user's scaled aToken balance
@@ -470,7 +471,7 @@ impl LendingPoolContract {
 
         // Transfer repayment from user to pool
         let token_client = token::Client::new(&env, &asset);
-        token_client.transfer(&caller, &env.current_contract_address(), &repay_amount);
+        token_client.transfer(&caller, env.current_contract_address(), &repay_amount);
 
         // Calculate scaled amount to burn
         let repay_ray = repay_amount.checked_mul(RAY).expect("overflow");
@@ -1242,18 +1243,43 @@ mod test {
     };
     use udonfi_a_token::ATokenContract;
     use udonfi_debt_token::DebtTokenContract;
+    use udonfi_liquidation::LiquidationContract;
+    use udonfi_price_oracle::PriceOracleContract;
+
+    const TOKEN_SCALE: i128 = 10_000_000;
+
+    fn tokens(units: i128) -> i128 {
+        units * TOKEN_SCALE
+    }
 
     fn setup_pool(env: &Env) -> (Address, LendingPoolContractClient<'_>) {
+        let oracle = Address::generate(env);
+        setup_pool_with_oracle(env, oracle)
+    }
+
+    fn setup_pool_with_oracle(
+        env: &Env,
+        oracle: Address,
+    ) -> (Address, LendingPoolContractClient<'_>) {
         let contract_id = env.register(LendingPoolContract, ());
         let client = LendingPoolContractClient::new(env, &contract_id);
 
         let admin = Address::generate(env);
-        let oracle = Address::generate(env);
         let treasury = Address::generate(env);
 
         client.initialize(&admin, &oracle, &treasury);
 
         (contract_id, client)
+    }
+
+    fn setup_oracle(env: &Env) -> (Address, udonfi_price_oracle::PriceOracleContractClient<'_>) {
+        let oracle = env.register(PriceOracleContract, ());
+        let oracle_client = udonfi_price_oracle::PriceOracleContractClient::new(env, &oracle);
+        let admin = Address::generate(env);
+        let reflector = Address::generate(env);
+        oracle_client.initialize(&admin, &reflector);
+
+        (oracle, oracle_client)
     }
 
     fn setup_reserve_with_tokens(
@@ -1262,6 +1288,7 @@ mod test {
         client: &LendingPoolContractClient<'_>,
         asset: &Address,
     ) -> (Address, Address) {
+        let reserve_index = client.get_reserve_count();
         let a_token = env.register(ATokenContract, ());
         let debt_token = env.register(DebtTokenContract, ());
 
@@ -1269,7 +1296,7 @@ mod test {
         a_token_client.initialize(
             pool_id,
             asset,
-            &0u32,
+            &reserve_index,
             &soroban_sdk::String::from_str(env, "aToken"),
             &symbol_short!("aToken"),
             &7u32,
@@ -1279,7 +1306,7 @@ mod test {
         debt_token_client.initialize(
             pool_id,
             asset,
-            &0u32,
+            &reserve_index,
             &soroban_sdk::String::from_str(env, "debtToken"),
             &symbol_short!("debtToken"),
             &7u32,
@@ -1296,7 +1323,7 @@ mod test {
             decimals: 7,
             is_active: true,
             is_borrowing_enabled: true,
-            reserve_index: 0,
+            reserve_index,
         };
         let rate_config = InterestRateConfig {
             optimal_utilization: WAD * 80 / 100,
@@ -1308,6 +1335,138 @@ mod test {
         client.add_reserve(&config, &rate_config);
 
         (a_token, debt_token)
+    }
+
+    #[test]
+    fn test_alice_deposit_borrow_repay_withdraw_flow() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (oracle, oracle_client) = setup_oracle(&env);
+        let (pool_id, client) = setup_pool_with_oracle(&env, oracle);
+
+        let admin = Address::generate(&env);
+        let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
+        let token_admin = StellarAssetClient::new(&env, &token_contract.address());
+        let asset = token_contract.address();
+        let token_client = TokenClient::new(&env, &asset);
+
+        let alice = Address::generate(&env);
+        let initial_balance = tokens(10_000);
+        let deposit_amount = tokens(1_000);
+        let borrow_amount = tokens(100);
+
+        token_admin.mint(&alice, &initial_balance);
+        oracle_client.set_price(&asset, &WAD);
+        setup_reserve_with_tokens(&env, &pool_id, &client, &asset);
+
+        client.supply(&alice, &asset, &deposit_amount);
+        assert_eq!(client.get_user_deposit(&alice, &asset), deposit_amount);
+        assert_eq!(client.get_pool_total_deposits(&asset), deposit_amount);
+        assert_eq!(token_client.balance(&pool_id), deposit_amount);
+
+        client.borrow(&alice, &asset, &borrow_amount);
+        assert_eq!(client.get_user_debt(&alice, &asset), borrow_amount);
+        assert_eq!(client.get_pool_total_borrows(&asset), borrow_amount);
+        assert!(client.get_health_factor(&alice) > WAD);
+
+        client.repay(&alice, &asset, &borrow_amount);
+        assert_eq!(client.get_user_debt(&alice, &asset), 0);
+        assert_eq!(client.get_pool_total_borrows(&asset), 0);
+
+        client.withdraw(&alice, &asset, &deposit_amount);
+        assert_eq!(client.get_user_deposit(&alice, &asset), 0);
+        assert_eq!(client.get_pool_total_deposits(&asset), 0);
+        assert_eq!(token_client.balance(&alice), initial_balance);
+    }
+
+    #[test]
+    fn test_manual_liquidation_flow() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let (oracle, oracle_client) = setup_oracle(&env);
+        let (pool_id, client) = setup_pool_with_oracle(&env, oracle);
+
+        let liquidation_id = env.register(LiquidationContract, ());
+        let liquidation_client =
+            udonfi_liquidation::LiquidationContractClient::new(&env, &liquidation_id);
+        let liquidation_admin = Address::generate(&env);
+        liquidation_client.initialize(&liquidation_admin, &pool_id);
+        client.set_liquidation_engine(&liquidation_id);
+
+        let collateral_admin = Address::generate(&env);
+        let collateral_contract = env.register_stellar_asset_contract_v2(collateral_admin.clone());
+        let collateral_admin_client = StellarAssetClient::new(&env, &collateral_contract.address());
+        let collateral_asset = collateral_contract.address();
+        let collateral_token = TokenClient::new(&env, &collateral_asset);
+
+        let debt_admin = Address::generate(&env);
+        let debt_contract = env.register_stellar_asset_contract_v2(debt_admin.clone());
+        let debt_admin_client = StellarAssetClient::new(&env, &debt_contract.address());
+        let debt_asset = debt_contract.address();
+        let debt_token = TokenClient::new(&env, &debt_asset);
+
+        setup_reserve_with_tokens(&env, &pool_id, &client, &collateral_asset);
+        setup_reserve_with_tokens(&env, &pool_id, &client, &debt_asset);
+
+        oracle_client.set_price(&collateral_asset, &WAD);
+        oracle_client.set_price(&debt_asset, &WAD);
+
+        let alice = Address::generate(&env);
+        let bob = Address::generate(&env);
+        let liquidator = Address::generate(&env);
+
+        let alice_deposit = tokens(2_000);
+        let bob_collateral = tokens(1_000);
+        let bob_borrow = tokens(700);
+
+        debt_admin_client.mint(&alice, &alice_deposit);
+        collateral_admin_client.mint(&bob, &bob_collateral);
+        debt_admin_client.mint(&liquidator, &bob_borrow);
+
+        client.supply(&alice, &debt_asset, &alice_deposit);
+        assert_eq!(client.get_pool_total_deposits(&debt_asset), alice_deposit);
+
+        client.supply(&bob, &collateral_asset, &bob_collateral);
+        assert_eq!(
+            client.get_user_deposit(&bob, &collateral_asset),
+            bob_collateral
+        );
+
+        client.borrow(&bob, &debt_asset, &bob_borrow);
+        assert_eq!(client.get_user_debt(&bob, &debt_asset), bob_borrow);
+        assert!(client.get_health_factor(&bob) > WAD);
+
+        oracle_client.set_price(&collateral_asset, &(WAD * 75 / 100));
+        assert!(client.get_health_factor(&bob) < WAD);
+
+        let session_id = liquidation_client.prepare_liquidation(
+            &liquidator,
+            &bob,
+            &debt_asset,
+            &collateral_asset,
+            &bob_borrow,
+        );
+        let params = liquidation_client.get_session(&session_id);
+        let expected_collateral_to_seize = bob_borrow * 140 / 100;
+        assert_eq!(params.debt_to_cover, bob_borrow);
+        assert_eq!(params.collateral_to_seize, expected_collateral_to_seize);
+
+        let liquidator_collateral_before = collateral_token.balance(&liquidator);
+        liquidation_client.execute_liquidation(&liquidator, &session_id);
+
+        assert_eq!(client.get_user_debt(&bob, &debt_asset), 0);
+        assert_eq!(
+            client.get_user_deposit(&bob, &collateral_asset),
+            bob_collateral - expected_collateral_to_seize
+        );
+        assert_eq!(
+            collateral_token.balance(&liquidator),
+            liquidator_collateral_before + expected_collateral_to_seize
+        );
+        assert_eq!(debt_token.balance(&pool_id), alice_deposit);
+        assert_eq!(client.get_health_factor(&bob), i128::MAX);
     }
 
     #[test]
@@ -1374,13 +1533,13 @@ mod test {
 
         // Setup user
         let user = Address::generate(&env);
-        token_admin.mint(&user, &10_000_0000000i128); // 10,000 with 7 decimals
+        token_admin.mint(&user, &tokens(10_000)); // 10,000 with 7 decimals
 
         // Setup reserve with real tokens
         setup_reserve_with_tokens(&env, &pool_id, &client, &asset);
 
         // Supply 1000 tokens
-        let supply_amount = 1000_0000000i128;
+        let supply_amount = tokens(1_000);
         client.supply(&user, &asset, &supply_amount);
 
         // Verify deposit recorded
@@ -1424,13 +1583,13 @@ mod test {
         let asset = token_contract.address();
 
         let user = Address::generate(&env);
-        token_admin.mint(&user, &10_000_0000000i128);
+        token_admin.mint(&user, &tokens(10_000));
 
         // Setup reserve with real tokens
         setup_reserve_with_tokens(&env, &pool_id, &client, &asset);
 
         // Supply first
-        client.supply(&user, &asset, &1000_0000000i128);
+        client.supply(&user, &asset, &tokens(1_000));
 
         // Verify collateral bit is automatically turned on upon supply
         let user_data = client.get_user_data(&user);
@@ -1461,17 +1620,17 @@ mod test {
         let asset = token_contract.address();
 
         let user = Address::generate(&env);
-        token_admin.mint(&user, &10_000_0000000i128);
-        token_admin.mint(&pool_id, &10_000_0000000i128); // Give pool some liquidity to borrow
+        token_admin.mint(&user, &tokens(10_000));
+        token_admin.mint(&pool_id, &tokens(10_000)); // Give pool some liquidity to borrow
 
         // Setup reserve with real tokens
         setup_reserve_with_tokens(&env, &pool_id, &client, &asset);
 
         // Supply 1000
-        client.supply(&user, &asset, &1000_0000000i128);
+        client.supply(&user, &asset, &tokens(1_000));
 
         // Borrow 100
-        client.borrow(&user, &asset, &100_0000000i128);
+        client.borrow(&user, &asset, &tokens(100));
 
         // Now try to turn off collateral - should panic!
         client.toggle_collateral(&user, &asset, &false);

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 38" width="160" height="38" fill="none">
+  <defs>
+    <!-- Cyan to Purple Gradient for the Bowl -->
+    <linearGradient id="bowlGrad" x1="4" y1="18" x2="38" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="100%" stop-color="#9b51e0" />
+    </linearGradient>
+    
+    <!-- Neon glow for the 'Fi' text -->
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ==================== ICON GROUP ==================== -->
+  <g transform="translate(0, 0)">
+    <!-- Steam Lines -->
+    <rect x="12" y="6" width="2" height="10" rx="1" fill="#00f2fe" opacity="0.8" />
+    <rect x="20" y="6" width="2" height="10" rx="1" fill="#00f2fe" opacity="0.8" />
+    <rect x="28" y="6" width="2" height="10" rx="1" fill="#00f2fe" opacity="0.8" />
+
+    <!-- Bowl Outer Border and Fill -->
+    <path d="M 5 19 L 37 19 A 16 16 0 0 1 5 19 Z" fill="url(#bowlGrad)" stroke="#f1f5f9" stroke-width="2" stroke-linejoin="round" />
+
+    <!-- Bowl Inner Line (clipped to bowl fill) -->
+    <clipPath id="bowlClip">
+      <path d="M 5 19 L 37 19 A 16 16 0 0 1 5 19 Z" />
+    </clipPath>
+    <rect x="4" y="22" width="34" height="2" fill="#f1f5f9" clip-path="url(#bowlClip)" />
+
+    <!-- Chopsticks -->
+    <rect x="0" y="14" width="38" height="2" rx="1" fill="#f1f5f9" transform="rotate(-15 19 15)" />
+    <rect x="2" y="10" width="38" height="2" rx="1" fill="#f1f5f9" transform="rotate(-20 21 11)" />
+  </g>
+
+  <!-- ==================== BRAND TEXT ==================== -->
+  <!-- Brand Title "UdonFi" -->
+  <text x="54" y="21" font-family="'Space Grotesk', -apple-system, sans-serif" font-size="20" font-weight="700" fill="#f1f5f9" letter-spacing="-0.5">Udon<tspan fill="#00f2fe" filter="url(#neonGlow)">Fi</tspan></text>
+  
+  <!-- Brand Subtitle "SOROBAN TESTNET" -->
+  <text x="54" y="32" font-family="'Outfit', -apple-system, sans-serif" font-size="8" font-weight="700" fill="#00f2fe" opacity="0.8" letter-spacing="1">SOROBAN TESTNET</text>
+</svg>

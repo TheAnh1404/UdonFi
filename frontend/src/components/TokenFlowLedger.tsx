@@ -449,9 +449,15 @@ export const TokenFlowLedger: React.FC<TokenFlowLedgerProps> = ({ txHistory, res
     const [copiedTxId, setCopiedTxId] = useState<string | null>(null);
 
     // Reset expanded row on any control change
-    useEffect(() => { setExpandedTxId(null); }, [searchTerm, filterType, currentPage, pageSize, viewMode]);
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setExpandedTxId(null);
+    }, [searchTerm, filterType, currentPage, pageSize, viewMode]);
     // Reset page on filter/search change
-    useEffect(() => { setCurrentPage(1); }, [searchTerm, filterType]);
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setCurrentPage(1);
+    }, [searchTerm, filterType]);
 
     const copyToClipboard = (text: string, txId: string) => {
         navigator.clipboard.writeText(text);

@@ -25,6 +25,14 @@ pub fn execute_repay(env: &Env, request: &RepayRequest) -> RepayResult<RepayExec
     let mut user_snapshot = read_user_accounting_snapshot(env, &request.actor, prepared.reserve_id)
         .ok_or(LendingError::NoDebtToRepay)?;
 
+    if request.current_ledger.0 < ledger.last_updated_ledger.0
+        || request.current_ledger.0 < reserve_accounting.last_updated_ledger.0
+    {
+        return Err(LendingError::InvalidAmount);
+    }
+    validate_accounting_ledger(&ledger)?;
+    validate_reserve_accounting(&reserve_accounting)?;
+
     let borrow_index = reserve_accounting.borrow_index;
     let previous_scaled_debt = reserve_accounting.total_scaled_debt;
 

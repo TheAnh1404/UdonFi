@@ -19,9 +19,14 @@ export function AnimateNumber({
     const startValueRef = useRef(value);
     const endValueRef = useRef(value);
     const startTimeRef = useRef<number | null>(null);
+    const displayValueRef = useRef(value);
 
     useEffect(() => {
-        startValueRef.current = displayValue;
+        displayValueRef.current = displayValue;
+    }, [displayValue]);
+
+    useEffect(() => {
+        startValueRef.current = displayValueRef.current;
         endValueRef.current = value;
         startTimeRef.current = null;
 

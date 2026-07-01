@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { Zap, Layers, RefreshCw, Cpu, Activity, CheckCircle } from 'lucide-react';
 import type { LiqSandbox, Reserve } from '../types/lending';
 
@@ -44,7 +44,7 @@ export const SorobanLiquidation: React.FC<SorobanLiquidationProps> = ({
     const isLiquidatable = healthFactor < 1.0;
 
     // Simulate prepare execution
-    const handlePrepareClick = () => {
+    const handlePrepareClick = useCallback(() => {
         setIsPreparing(true);
         setPrepCpuWidth(0);
         
@@ -57,10 +57,10 @@ export const SorobanLiquidation: React.FC<SorobanLiquidationProps> = ({
             onPrepare();
             setIsPreparing(false);
         }, 1200);
-    };
+    }, [onPrepare]);
 
     // Simulate execute execution
-    const handleExecuteClick = () => {
+    const handleExecuteClick = useCallback(() => {
         setIsExecuting(true);
         setExecCpuWidth(0);
 
@@ -73,7 +73,7 @@ export const SorobanLiquidation: React.FC<SorobanLiquidationProps> = ({
             onExecute();
             setIsExecuting(false);
         }, 1200);
-    };
+    }, [onExecute]);
 
     // Automated keeper routine
     useEffect(() => {
@@ -94,7 +94,7 @@ export const SorobanLiquidation: React.FC<SorobanLiquidationProps> = ({
             }, 1200);
             return () => clearTimeout(timer);
         }
-    }, [sandbox.isAutoKeeperActive, isLiquidatable, sandbox.stepActive, isPreparing, isExecuting]);
+    }, [sandbox.isAutoKeeperActive, isLiquidatable, sandbox.stepActive, isPreparing, isExecuting, handlePrepareClick, handleExecuteClick]);
 
     return (
         <div className="soroban-tab-content active">

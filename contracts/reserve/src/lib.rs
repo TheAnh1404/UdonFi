@@ -9,10 +9,10 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env};
+use soroban_sdk::{contract, contractimpl, Env};
 use udonfi_common::{
-    math::*, InterestRateConfig, LendingError, ReserveConfig, ReserveDataKey, ReserveState, RAY,
-    TTL_EXTEND_TO, TTL_THRESHOLD, WAD,
+    math::*, InterestRateConfig, ReserveConfig, ReserveDataKey, ReserveState, RAY, TTL_EXTEND_TO,
+    TTL_THRESHOLD,
 };
 
 #[contract]
@@ -324,7 +324,8 @@ impl ReserveContract {
 #[cfg(test)]
 mod test {
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Env};
+    use soroban_sdk::{testutils::Address as _, Address, Env};
+    use udonfi_common::WAD;
 
     fn create_test_config(env: &Env) -> (ReserveConfig, InterestRateConfig) {
         let config = ReserveConfig {

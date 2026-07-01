@@ -6,7 +6,7 @@ UdonFi V2 is currently focused on a contract-first MVP:
 React Frontend -> Freighter Wallet -> Soroban RPC -> UdonFi Soroban Smart Contracts -> Stellar Testnet -> Stellar Expert
 ```
 
-Backend, event indexer, liquidation bot, PostgreSQL event sync, real-time dashboard pipeline, queue, worker, checkpoint/replay, and sync lag strategy are Post-MVP / Future Work.
+Off-chain services, analytics pipelines, and production monitoring are outside the current demo path.
 
 ## Development Philosophy
 
@@ -48,7 +48,7 @@ npm run build
 npm run lint
 ```
 
-Backend/indexer/bot setup is not required for MVP contribution or demo verification unless the task is explicitly Post-MVP.
+Off-chain service setup is not required for MVP contribution or demo verification unless a task explicitly scopes it.
 
 ## Coding Standards
 
@@ -66,7 +66,7 @@ Backend/indexer/bot setup is not required for MVP contribution or demo verificat
 - Read state directly from Soroban RPC for MVP.
 - Submit writes through Freighter-signed Soroban transactions.
 - Show Stellar Expert links after transaction submission.
-- Do not require backend/indexer data for MVP dashboard correctness.
+- Do not require off-chain derived data for MVP dashboard correctness.
 
 ## Pull Request Process
 

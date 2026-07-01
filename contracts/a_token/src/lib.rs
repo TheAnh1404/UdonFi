@@ -9,11 +9,10 @@
 //! Users can transfer aTokens between each other (secondary market).
 
 #![no_std]
+#![allow(deprecated)]
 
-use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol,
-};
-use udonfi_common::{LendingError, TokenDataKey, RAY, TTL_EXTEND_TO, TTL_THRESHOLD};
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, String, Symbol};
+use udonfi_common::{TokenDataKey, TTL_EXTEND_TO, TTL_THRESHOLD};
 
 // ─────────────────────────────────────────────
 // Contract

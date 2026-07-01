@@ -47,8 +47,8 @@ export const SorobanKinked: React.FC<SorobanKinkedProps> = ({ reserves }) => {
     const pathStr = `M ${ptA.x},${ptA.y} L ${ptKink.x},${ptKink.y} L ${ptMax.x},${ptMax.y}`;
 
     // Current location coordinates
-    let dotX = mapX(utilization);
-    let dotY = mapY(currentBorrowApy);
+    const dotX = mapX(utilization);
+    const dotY = mapY(currentBorrowApy);
 
     return (
         <div className="soroban-tab-content active">

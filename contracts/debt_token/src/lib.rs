@@ -9,9 +9,10 @@
 //! Transfer is ALWAYS rejected — debt cannot be moved between users.
 
 #![no_std]
+#![allow(deprecated)]
 
 use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, String, Symbol};
-use udonfi_common::{LendingError, TokenDataKey, TTL_EXTEND_TO, TTL_THRESHOLD};
+use udonfi_common::{TokenDataKey, TTL_EXTEND_TO, TTL_THRESHOLD};
 
 #[contract]
 pub struct DebtTokenContract;

@@ -15,7 +15,7 @@ contracts/
 ├── risk_engine/                # Vault solvency calculations
 ├── interest_rate_engine/       # Dynamic APY algorithms
 ├── liquidation/                # 2-step liquidation manager
-├── price_oracle/               # Oracle Aggregator contract
+├── price_oracle/               # Reflector/SEP-40 oracle adapter
 ├── reserve/                    # Asset registry configurations
 ├── governance/                 # Proposal voting & contract upgrades
 │
@@ -28,10 +28,10 @@ contracts/
 
 - **`shared`**: The foundational package. Defines constants, contract error codes, event topics, newtype primitive wrappers, storage layouts, math/rounding libraries, and ledger validators. **All other contracts must depend on this package.**
 - **`lending_pool`**: The core router contract. Handles user deposit and borrow interactions, tracks reserve pools, and mints/burns yield tokens.
-- **`risk_engine`**: Evaluates position solvency stateless by retrieving price data and comparing it against reserve collateral limits.
+- **`risk_engine`**: Historical planned module. Current Health Factor checks live in `lending_pool` and read prices from `price_oracle`.
 - **`interest_rate_engine`**: Calculates the variable Borrow APY and Supply APY percentages based on utilization limits.
 - **`liquidation`**: Coordinates the 2-step liquidation flow, preventing CPU instruction limit overflows by splitting transaction execution.
-- **`price_oracle`**: A decentralized oracle aggregator that validates feed values from Pyth, Band, and fallback interfaces.
+- **`price_oracle`**: A Reflector/SEP-40-compatible oracle adapter. Testnet/demo mode reads external oracle prices; manual mode is only for local tests.
 - **`reserve`**: A configuration registry storing maximum LTV limits, liquidation thresholds, and asset decimals.
 - **`governance`**: Implements proposals, voting locks, voting tallies, and timelocked code upgrades.
 - **`common`**: Legacy shared types and helpers.

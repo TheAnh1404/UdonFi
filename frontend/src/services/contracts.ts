@@ -23,6 +23,39 @@ export type ContractConfig = {
   liquidationId: string;
   defaultAssetId: string;
   usdcAssetId: string;
+  reflectorContractId: string;
+  oracleMode: "reflector" | "manual";
+  maxPriceStalenessLedgers: number;
+  usdBaseAssetId: string;
+};
+
+export type OracleStatus = {
+  mode?: string;
+  price_wad?: bigint;
+  priceWad?: bigint;
+  updated_at?: bigint | number;
+  updatedAt?: bigint | number;
+  current_ledger?: number;
+  currentLedger?: number;
+  max_staleness_ledgers?: number;
+  maxStalenessLedgers?: number;
+  is_stale?: boolean;
+  isStale?: boolean;
+};
+
+export type UserAccountData = {
+  total_collateral_usd?: bigint;
+  totalCollateralUsd?: bigint;
+  total_debt_usd?: bigint;
+  totalDebtUsd?: bigint;
+  available_borrow_usd?: bigint;
+  availableBorrowUsd?: bigint;
+  health_factor?: bigint;
+  healthFactor?: bigint;
+  current_ltv?: bigint;
+  currentLtv?: bigint;
+  config_bitmap?: bigint;
+  configBitmap?: bigint;
 };
 
 export type ContractActionParams = {
@@ -66,6 +99,10 @@ export const getContractConfig = (): ContractConfig => ({
   liquidationId: import.meta.env.VITE_LIQUIDATION_CONTRACT_ID || "",
   defaultAssetId: import.meta.env.VITE_XLM_ASSET_CONTRACT_ID || DEFAULT_ASSET_ID,
   usdcAssetId: import.meta.env.VITE_USDC_ASSET_CONTRACT_ID || DEFAULT_USDC_ASSET_ID,
+  reflectorContractId: import.meta.env.VITE_REFLECTOR_CONTRACT_ID || "",
+  oracleMode: import.meta.env.VITE_ORACLE_MODE === "manual" ? "manual" : "reflector",
+  maxPriceStalenessLedgers: Number(import.meta.env.VITE_MAX_PRICE_STALENESS_LEDGERS || 120),
+  usdBaseAssetId: import.meta.env.VITE_USD_BASE_ASSET_ID || "",
 });
 
 export const hasRequiredContractIds = (config = getContractConfig()) =>
@@ -108,6 +145,15 @@ export const formatWad = (value: unknown) => {
   return `${whole}.${fraction}`;
 };
 
+export const wadToNumber = (value: unknown) => {
+  if (value === undefined || value === null) {
+    return 0;
+  }
+
+  const integer = typeof value === "bigint" ? value : BigInt(String(value));
+  return Number(integer) / 10 ** WAD_DECIMALS;
+};
+
 export const formatAssetAmount = (value: unknown, decimals = 7) => {
   if (value === undefined || value === null) {
     return "0";
@@ -124,6 +170,8 @@ export const formatAssetAmount = (value: unknown, decimals = 7) => {
 const addressArg = (address: string) => new Address(address).toScVal();
 
 const i128Arg = (value: bigint) => nativeToScVal(value, { type: "i128" });
+
+const boolArg = (value: boolean) => nativeToScVal(value);
 
 const bytes32Arg = (hex: string) => {
   const normalized = hex.trim().replace(/^0x/i, "");
@@ -258,6 +306,45 @@ export const getHealthFactor = (source: string) => {
   });
 };
 
+export const getUserData = (source: string) => {
+  const config = getContractConfig();
+
+  return simulateContractRead<UserAccountData>({
+    source,
+    contractId: requireContractId(config.lendingPoolId, "Lending pool"),
+    method: "get_user_data",
+    args: [addressArg(source)],
+    rpcUrl: config.rpcUrl,
+    networkPassphrase: config.networkPassphrase,
+  });
+};
+
+export const getOraclePrice = (source: string, assetId = getContractConfig().defaultAssetId) => {
+  const config = getContractConfig();
+
+  return simulateContractRead<bigint>({
+    source,
+    contractId: requireContractId(config.priceOracleId, "Price oracle"),
+    method: "get_price_wad",
+    args: [addressArg(assetId)],
+    rpcUrl: config.rpcUrl,
+    networkPassphrase: config.networkPassphrase,
+  });
+};
+
+export const getOracleStatus = (source: string, assetId = getContractConfig().defaultAssetId) => {
+  const config = getContractConfig();
+
+  return simulateContractRead<OracleStatus>({
+    source,
+    contractId: requireContractId(config.priceOracleId, "Price oracle"),
+    method: "get_oracle_status",
+    args: [addressArg(assetId)],
+    rpcUrl: config.rpcUrl,
+    networkPassphrase: config.networkPassphrase,
+  });
+};
+
 export const initializeProtocol = (walletAddress: string, onPhase?: (phase: TransactionPhase) => void) => {
   const config = getContractConfig();
 
@@ -318,6 +405,29 @@ export const repay = ({ walletAddress, amount, assetId, onPhase }: ContractActio
     contractId: requireContractId(config.lendingPoolId, "Lending pool"),
     method: "repay",
     args: [addressArg(walletAddress), addressArg(targetAsset), i128Arg(parseAssetAmount(amount))],
+    onPhase,
+  });
+};
+
+export const toggleCollateral = ({
+  walletAddress,
+  assetId,
+  useAsCollateral,
+  onPhase,
+}: {
+  walletAddress: string;
+  assetId?: string;
+  useAsCollateral: boolean;
+  onPhase?: (phase: TransactionPhase) => void;
+}) => {
+  const config = getContractConfig();
+  const targetAsset = assetId || config.defaultAssetId;
+
+  return executeContract({
+    source: walletAddress,
+    contractId: requireContractId(config.lendingPoolId, "Lending pool"),
+    method: "toggle_collateral",
+    args: [addressArg(walletAddress), addressArg(targetAsset), boolArg(useAsCollateral)],
     onPhase,
   });
 };

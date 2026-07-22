@@ -22,6 +22,14 @@ interface CreditMarketPageProps {
     reserves: Record<'XLM' | 'USDC', Reserve>;
     userBalances: UserBalances;
     wallet: { isConnected: boolean; address: string };
+    contractAccountData?: {
+        totalCollateralUsd: number;
+        totalDebtUsd: number;
+        availableBorrowUsd: number;
+        healthFactor: number;
+        currentLtv: number;
+        source: 'contract' | 'unavailable';
+    };
     onConnect: () => void;
     onTransactionSubmit: (
         action: 'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE',
@@ -42,6 +50,7 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
     reserves,
     userBalances,
     wallet,
+    contractAccountData,
     onConnect,
     onTransactionSubmit,
     onToggleCollateral,
@@ -74,13 +83,16 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
     const xlmDebtValue = xlmDebt * reserves.XLM.price;
     const usdcDebtValue = usdcDebt * reserves.USDC.price;
 
-    const currentTotalSuppliedVal = (isXlmCollateral ? xlmSuppliedValue : 0) + (isUsdcCollateral ? usdcSuppliedValue : 0);
-    const currentTotalDebtVal = xlmDebtValue + usdcDebtValue;
-    const currentHealthFactor = currentTotalDebtVal > 0 ? (currentTotalSuppliedVal * 0.825) / currentTotalDebtVal : Infinity;
+    const localTotalSuppliedVal = (isXlmCollateral ? xlmSuppliedValue : 0) + (isUsdcCollateral ? usdcSuppliedValue : 0);
+    const localTotalDebtVal = xlmDebtValue + usdcDebtValue;
+    const hasContractData = contractAccountData?.source === 'contract';
+    const currentTotalSuppliedVal = hasContractData ? contractAccountData.totalCollateralUsd : localTotalSuppliedVal;
+    const currentTotalDebtVal = hasContractData ? contractAccountData.totalDebtUsd : localTotalDebtVal;
+    const currentHealthFactor = hasContractData ? contractAccountData.healthFactor : Infinity;
 
     // Borrow Power / Collateral Cap at 70% LTV
-    const currentBorrowPower = currentTotalSuppliedVal * 0.70;
-    const currentBorrowLimitPercent = currentTotalSuppliedVal > 0 ? (currentTotalDebtVal / currentBorrowPower) * 100 : 0;
+    const currentBorrowPower = hasContractData ? contractAccountData.availableBorrowUsd + currentTotalDebtVal : currentTotalSuppliedVal * 0.70;
+    const currentBorrowLimitPercent = currentBorrowPower > 0 ? (currentTotalDebtVal / currentBorrowPower) * 100 : 0;
 
     const handleActionChange = (action: typeof activeAction) => {
         setActiveAction(action);
@@ -207,7 +219,7 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
                             </div>
                         </div>
 
-                        {/* Circular progress simulated visual */}
+                        {/* Circular progress visual */}
                         <div style={{ width: '42px', height: '42px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <svg width="42" height="42" viewBox="0 0 42 42" style={{ transform: 'rotate(-90deg)' }}>
                                 <circle cx="21" cy="21" r="17" stroke="rgba(255,255,255,0.03)" strokeWidth="4" fill="transparent" />
@@ -288,6 +300,7 @@ export const CreditMarketPage: React.FC<CreditMarketPageProps> = ({
                         txDetails={txDetails}
                         onResetTxState={onResetTxState}
                         onExtendTtl={onExtendTtl}
+                        contractAccountData={contractAccountData}
                         showCloseButton={false}
                         onRegisterTrustline={onRegisterTrustline}
                     />

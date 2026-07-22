@@ -34,7 +34,7 @@ MVP scope is contract-first: React Frontend, Freighter Wallet, Soroban RPC, Udon
 
 - **Boundary 1 (User to Web UI)**: Web UI runs in the user's browser, communicating with Freighter Wallet.
 - **Boundary 2 (Web UI to Soroban RPC)**: Frontend reads contract state and submits signed transactions through Soroban RPC.
-- **Boundary 3 (Smart Contracts to Oracles/Price Inputs)**: MVP uses configured price inputs or available oracle components; production oracle aggregation is not complete.
+- **Boundary 3 (Smart Contracts to Oracles/Price Inputs)**: MVP uses the on-chain `price_oracle` adapter in Reflector/SEP-40 mode for Testnet/demo. Manual oracle mode is local-test only.
 
 ---
 
@@ -43,7 +43,7 @@ MVP scope is contract-first: React Frontend, Freighter Wallet, Soroban RPC, Udon
 | Threat Category | Threat Scenario | Mitigation Strategy |
 |---|---|---|
 | **Spoofing** | Attacker signs transactions pretending to be a borrower. | Enforce cryptographic signature verification in Soroban SDK via Freighter. |
-| **Tampering** | Attacker manipulates on-chain price feeds. | Multi-feed Oracle Aggregator with price deviation checks and stale price protection. |
+| **Tampering** | Attacker manipulates on-chain price feeds. | Reflector/SEP-40 adapter with invalid, stale, and deviation checks. |
 | **Repudiation** | User denies performing a liquidation or borrow. | Event logging with transaction hash mappings and unique sequence IDs. |
 | **Information Disclosure** | Front-running pending liquidations or borrows in Stellar transaction pools. | Flash-loan checks and 2-step liquidation flows. Secure preparation signatures. |
 | **Denial of Service** | Evicting ledger entries by letting block TTL expire. | Automated `extend_ttl` executions on all user write transactions. |

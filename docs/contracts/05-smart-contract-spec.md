@@ -53,7 +53,7 @@ pub enum Error {
     GenericError = 1,
     CapViolation = 100,             // Thrown when a deposit or borrow exceeds reserve capacity caps
     StalePrice = 101,              // Thrown when oracle price timestamp exceeds stale window
-    PriceDeviationExceeded = 102,  // Thrown when deviation between oracle feeds is >2%
+    PriceDeviationExceeded = 102,  // Thrown when price movement exceeds configured deviation threshold
     AssetPaused = 103,             // Thrown when performing transactions on a paused reserve
     InsolventPosition = 104,       // Thrown when an action results in HF < 1.0
     IndexAccrualOverflow = 105,    // Math overflows during interest compounding
@@ -131,16 +131,22 @@ pub trait LiquidationTrait {
 }
 ```
 
-### E. Price Oracle Aggregator (`price_oracle`)
-Collects and filters asset price data.
+### E. Price Oracle Adapter (`price_oracle`)
+Reads and filters Reflector/SEP-40-compatible price data. Manual mode is for local tests only.
 
 ```rust
-pub trait PriceOracleAggregatorTrait {
-    // Aggregates prices from multiple oracle providers (Pyth, Band) and checks for deviation.
+pub trait PriceOracleAdapterTrait {
+    // Returns the adapter price in WAD precision.
     fn get_price(env: Env, asset: Address) -> i128;
-    
-    // Updates fallback pricing configurations.
-    fn update_feed_mapping(env: Env, asset: Address, feed_address: Address) -> Result<(), Error>;
+
+    // Returns the adapter price normalized to WAD precision.
+    fn get_price_wad(env: Env, asset: Address) -> i128;
+
+    // Maps a reserve asset to the external SEP-40 oracle asset.
+    fn set_reflector_stellar_asset(env: Env, asset: Address, stellar_asset: Address);
+
+    // Test/local only. Requires oracle mode `manual`.
+    fn set_price(env: Env, asset: Address, price_wad: i128);
 }
 ```
 
@@ -258,4 +264,3 @@ To protect the protocol from exploit runs due to integer division truncation:
 - **Rounding Direction Rules**:
   - `div_up(a, b) = (a + b - 1) / b`
   - `div_down(a, b) = a / b`
-

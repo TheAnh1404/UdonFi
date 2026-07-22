@@ -11,6 +11,16 @@
     "priceOracle": "",
     "liquidation": ""
   },
+  "oracle": {
+    "mode": "reflector",
+    "reflectorContractId": "",
+    "maxPriceStalenessLedgers": 120,
+    "assets": {
+      "xlm": "",
+      "usdc": "",
+      "usdBase": ""
+    }
+  },
   "stellarExpert": {
     "baseUrl": "https://stellar.expert/explorer/testnet"
   }

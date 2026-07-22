@@ -12,7 +12,7 @@ The MVP must prove the complete lending loop without an off-chain service depend
 - Withdraw.
 - Borrow.
 - Repay.
-- Calculate basic Health Factor.
+- Calculate oracle-based Health Factor.
 - Execute manual liquidation.
 - Emit basic contract events.
 - Show Stellar Expert transaction links.
@@ -34,7 +34,7 @@ The frontend reads contract state directly through Soroban RPC. User writes are 
 ### Borrowers
 - Borrow against supplied collateral.
 - Repay debt manually through the frontend.
-- Track basic Health Factor from direct RPC reads.
+- Track Health Factor from `lending_pool.get_health_factor` direct RPC reads.
 
 ### Manual Liquidators
 - Find or select unhealthy positions.
@@ -51,7 +51,7 @@ The frontend reads contract state directly through Soroban RPC. User writes are 
 - Off-chain automation services.
 - Off-chain analytics services.
 - Production monitoring pipelines.
-- Production oracle aggregation.
+- Mainnet oracle operations and governance. Reflector/SEP-40-compatible Testnet oracle reads are in MVP scope.
 - Mainnet launch readiness.
 
 ## 5. Documentation Map

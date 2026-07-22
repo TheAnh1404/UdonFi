@@ -25,7 +25,7 @@ use soroban_sdk::{
 };
 use udonfi_common::{
     bitmap::*, math::*, InterestRateConfig, PoolDataKey, ReserveConfig, UserAccountData,
-    HEALTH_FACTOR_LIQUIDATION_THRESHOLD, RAY, TTL_EXTEND_TO, TTL_THRESHOLD, WAD,
+    HEALTH_FACTOR_LIQUIDATION_THRESHOLD, RAY, TTL_EXTEND_TO, TTL_THRESHOLD,
 };
 
 // ─────────────────────────────────────────────
@@ -548,11 +548,11 @@ impl LendingPoolContract {
         if !use_as_collateral {
             // Check if user has borrows and if disabling is safe
             if has_any_borrows(bitmap) {
-                // Set temporary bitmap with collateral disabled to simulate health factor
+                // Project the bitmap with collateral disabled for Health Factor validation.
                 let mut temp_bitmap = bitmap;
                 set_using_as_collateral(&mut temp_bitmap, reserve_index as u8, false);
 
-                // Temporarily save bitmap for calculation (calculate_health_factor_internal reads from storage)
+                // Temporarily save bitmap for calculation (calculate_health_factor_internal reads from storage).
                 Self::set_user_bitmap(&env, &caller, temp_bitmap);
                 let hf = Self::calculate_health_factor_internal(&env, &caller);
 
@@ -1163,22 +1163,16 @@ impl LendingPoolContract {
     }
 
     fn get_asset_price(env: &Env, oracle: &Address, asset: &Address) -> i128 {
-        // Call the PriceOracle adapter contract using try_invoke_contract to fetch the actual price
+        // Health Factor is sourced from the on-chain oracle adapter only.
         let price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
             oracle,
-            &soroban_sdk::Symbol::new(env, "get_price_usd"),
+            &soroban_sdk::Symbol::new(env, "get_price_wad"),
             soroban_sdk::vec![env, asset.clone().into_val(env)],
         );
 
         match price_res {
-            Ok(Ok(price)) => price,
-            _ => {
-                // Fallback: Try to read a mock price stored in pool storage
-                env.storage()
-                    .persistent()
-                    .get::<_, i128>(&PoolDataKey::ReserveByIndex(7000))
-                    .unwrap_or(WAD) // Default $1.00
-            }
+            Ok(Ok(price)) if price > 0 => price,
+            _ => panic!("oracle price unavailable"),
         }
     }
 
@@ -1278,6 +1272,7 @@ mod test {
         let admin = Address::generate(env);
         let reflector = Address::generate(env);
         oracle_client.initialize(&admin, &reflector);
+        oracle_client.set_oracle_mode(&soroban_sdk::Symbol::new(env, "manual"));
 
         (oracle, oracle_client)
     }
@@ -1522,13 +1517,15 @@ mod test {
         let env = Env::default();
         env.mock_all_auths();
 
-        let (pool_id, client) = setup_pool(&env);
+        let (oracle, oracle_client) = setup_oracle(&env);
+        let (pool_id, client) = setup_pool_with_oracle(&env, oracle);
 
         // Create a test token (simulating SAC)
         let admin = Address::generate(&env);
         let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
         let token_admin = StellarAssetClient::new(&env, &token_contract.address());
         let asset = token_contract.address();
+        oracle_client.set_price(&asset, &WAD);
         let token_client = TokenClient::new(&env, &asset);
 
         // Setup user
@@ -1575,12 +1572,14 @@ mod test {
         let env = Env::default();
         env.mock_all_auths();
 
-        let (pool_id, client) = setup_pool(&env);
+        let (oracle, oracle_client) = setup_oracle(&env);
+        let (pool_id, client) = setup_pool_with_oracle(&env, oracle);
 
         let admin = Address::generate(&env);
         let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
         let token_admin = StellarAssetClient::new(&env, &token_contract.address());
         let asset = token_contract.address();
+        oracle_client.set_price(&asset, &WAD);
 
         let user = Address::generate(&env);
         token_admin.mint(&user, &tokens(10_000));
@@ -1612,12 +1611,14 @@ mod test {
         let env = Env::default();
         env.mock_all_auths();
 
-        let (pool_id, client) = setup_pool(&env);
+        let (oracle, oracle_client) = setup_oracle(&env);
+        let (pool_id, client) = setup_pool_with_oracle(&env, oracle);
 
         let admin = Address::generate(&env);
         let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
         let token_admin = StellarAssetClient::new(&env, &token_contract.address());
         let asset = token_contract.address();
+        oracle_client.set_price(&asset, &WAD);
 
         let user = Address::generate(&env);
         token_admin.mint(&user, &tokens(10_000));

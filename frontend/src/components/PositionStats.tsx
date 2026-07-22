@@ -6,9 +6,16 @@ interface PositionStatsProps {
     reserves: Record<'XLM' | 'USDC', Reserve>;
     userBalances: UserBalances;
     wallet: { isConnected: boolean; address: string };
+    contractAccountData?: {
+        totalCollateralUsd: number;
+        totalDebtUsd: number;
+        availableBorrowUsd: number;
+        currentLtv: number;
+        source: 'contract' | 'unavailable';
+    };
 }
 
-export const PositionStats: React.FC<PositionStatsProps> = ({ reserves, userBalances, wallet }) => {
+export const PositionStats: React.FC<PositionStatsProps> = ({ reserves, userBalances, wallet, contractAccountData }) => {
     // 1. Calculate actual balances (Scaled * Index)
     const xlmSupplied = userBalances.suppliedScaled.XLM * reserves.XLM.liquidityIndex;
     const usdcSupplied = userBalances.suppliedScaled.USDC * reserves.USDC.liquidityIndex;
@@ -26,11 +33,15 @@ export const PositionStats: React.FC<PositionStatsProps> = ({ reserves, userBala
     const xlmDebtValue = xlmDebt * reserves.XLM.price;
     const usdcDebtValue = usdcDebt * reserves.USDC.price;
 
-    const totalCollateralValue = (isXlmCollateral ? xlmSuppliedValue : 0) + (isUsdcCollateral ? usdcSuppliedValue : 0);
-    const totalDebtValue = xlmDebtValue + usdcDebtValue;
+    const localCollateralValue = (isXlmCollateral ? xlmSuppliedValue : 0) + (isUsdcCollateral ? usdcSuppliedValue : 0);
+    const localDebtValue = xlmDebtValue + usdcDebtValue;
+    const hasContractData = contractAccountData?.source === 'contract';
+    const totalCollateralValue = hasContractData ? contractAccountData.totalCollateralUsd : localCollateralValue;
+    const totalDebtValue = hasContractData ? contractAccountData.totalDebtUsd : localDebtValue;
+    const availableBorrowUsd = hasContractData ? contractAccountData.availableBorrowUsd : Math.max(0, (localCollateralValue * 0.7) - localDebtValue);
 
     // 3. Current LTV
-    const currentLtv = totalCollateralValue > 0 ? (totalDebtValue / totalCollateralValue) * 100 : 0;
+    const currentLtv = hasContractData ? contractAccountData.currentLtv : (totalCollateralValue > 0 ? (totalDebtValue / totalCollateralValue) * 100 : 0);
 
     // 4. Net APY Calculation
     // Net APY = (Supply Yield - Borrow Interest) / Net Value
@@ -96,7 +107,7 @@ export const PositionStats: React.FC<PositionStatsProps> = ({ reserves, userBala
                             ${totalDebtValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                         <span className="text-xs text-dim">
-                            Hạn mức vay còn lại: ${Math.max(0, (totalCollateralValue * 0.7) - totalDebtValue).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            Hạn mức vay còn lại: ${availableBorrowUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                         </span>
                     </div>
 

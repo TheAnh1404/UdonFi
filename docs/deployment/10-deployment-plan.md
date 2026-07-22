@@ -16,11 +16,10 @@ Smart contracts must be deployed in a specific order due to cross-contract depen
 
 ```mermaid
 graph TD
-    Common[Deploy Common Shared Types] --> Oracle[Deploy Oracle Aggregator]
+    Common[Deploy Common Shared Types] --> Oracle[Deploy Reflector Oracle Adapter]
     Common --> Reserve[Deploy Reserve Config]
-    Oracle --> Risk[Deploy Risk Engine]
-    Reserve --> Risk
-    Risk --> Pool[Deploy Lending Pool Router]
+    Oracle --> Pool[Deploy Lending Pool Router]
+    Reserve --> Pool
     Pool --> Liq[Deploy Liquidation Coordinator]
     Pool --> Tokens[Deploy aToken & debtToken Contracts]
 ```
@@ -30,8 +29,8 @@ graph TD
 2. **Upload Wasm to Ledger**: Upload WASM binaries to obtain the Wasm hashes.
 3. **Deploy Instance**: Deploy contract instances using the Wasm hashes.
 4. **Link Components**:
-   - Initialize the `lending_pool` with the addresses of the `risk_engine`, `reserve_config`, and `interest_rate_engine`.
-   - Configure the `oracle_aggregator` with active price feeds.
+   - Initialize the `lending_pool` with the price oracle adapter and treasury addresses.
+   - Configure `price_oracle` with `ORACLE_MODE=reflector`, `REFLECTOR_CONTRACT_ID`, max staleness, and XLM asset mapping.
    - Configure the `liquidation_coordinator` with the `lending_pool` address.
 
 ---
@@ -67,6 +66,7 @@ The administrative keys of the protocol are distributed across a 3-of-5 multisig
 - [ ] UdonFi contracts are deployed to Stellar Testnet.
 - [ ] Reserves are initialized with demo caps and risk parameters.
 - [ ] Frontend is configured with Testnet contract IDs and Soroban RPC URL.
+- [ ] Reflector/SEP-40-compatible oracle contract ID is configured.
 - [ ] Freighter is configured for Stellar Testnet.
 - [ ] Deposit, withdraw, borrow, repay, and manual liquidation demo flow works.
 - [ ] Stellar Expert links open for submitted transaction hashes.
@@ -80,7 +80,7 @@ Before deploying to the Stellar mainnet, the following tasks must be completed:
 
 - [ ] All smart contract code has passed security audits with no outstanding critical issues.
 - [ ] Gas optimization checks verify that all key transactions use less than 70 million instructions.
-- [ ] Pyth and Band price feeds are deployed and verified on mainnet.
+- [ ] Mainnet oracle provider, governance, monitoring, and failover procedures are specified and audited.
 - [ ] Off-chain analytics architecture is reviewed if production analytics are included.
 - [ ] Multisig participants have verified their hardware wallet connections.
 - [ ] Standard web frontend assets are deployed to decentralized storage networks (e.g., IPFS / Arweave) with DDoS protection.

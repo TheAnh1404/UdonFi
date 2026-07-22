@@ -21,7 +21,11 @@ load_env_file "$CONTRACTS_DIR/.env.local"
 SOROBAN_RPC_URL="${SOROBAN_RPC_URL:-https://soroban-testnet.stellar.org:443}"
 SOROBAN_NETWORK_PASSPHRASE="${SOROBAN_NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}"
 SOURCE_ACCOUNT="${SOURCE_ACCOUNT:-udonfi-testnet-deployer}"
+ORACLE_MODE="${ORACLE_MODE:-reflector}"
+REFLECTOR_CONTRACT_ID="${REFLECTOR_CONTRACT_ID:-}"
+MAX_PRICE_STALENESS_LEDGERS="${MAX_PRICE_STALENESS_LEDGERS:-120}"
 XLM_ASSET_CONTRACT_ID="${XLM_ASSET_CONTRACT_ID:-CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC}"
+USD_BASE_ASSET_ID="${USD_BASE_ASSET_ID:-}"
 STELLAR_EXPERT_BASE_URL="${STELLAR_EXPERT_BASE_URL:-https://stellar.expert/explorer/testnet}"
 
 : "${LENDING_POOL_CONTRACT_ID:?Set LENDING_POOL_CONTRACT_ID by running deploy-testnet.sh first.}"
@@ -29,6 +33,16 @@ STELLAR_EXPERT_BASE_URL="${STELLAR_EXPERT_BASE_URL:-https://stellar.expert/explo
 : "${DEBT_TOKEN_CONTRACT_ID:?Set DEBT_TOKEN_CONTRACT_ID by running deploy-testnet.sh first.}"
 : "${PRICE_ORACLE_CONTRACT_ID:?Set PRICE_ORACLE_CONTRACT_ID by running deploy-testnet.sh first.}"
 : "${LIQUIDATION_CONTRACT_ID:?Set LIQUIDATION_CONTRACT_ID by running deploy-testnet.sh first.}"
+
+if [ "$ORACLE_MODE" = "reflector" ] && [ -z "$REFLECTOR_CONTRACT_ID" ]; then
+  echo "REFLECTOR_CONTRACT_ID must be set when ORACLE_MODE=reflector." >&2
+  exit 1
+fi
+
+if [ "$ORACLE_MODE" != "reflector" ] && [ "$ORACLE_MODE" != "manual" ]; then
+  echo "ORACLE_MODE must be reflector or manual." >&2
+  exit 1
+fi
 
 mkdir -p "$REPO_ROOT/deployments"
 ADMIN_PUBLIC_KEY="$(stellar keys address "$SOURCE_ACCOUNT")"
@@ -91,7 +105,22 @@ stellar network add \
 run_tx "initialize price oracle" \
   stellar contract invoke --id "$PRICE_ORACLE_CONTRACT_ID" --source-account "$SOURCE_ACCOUNT" --network testnet --send=yes -- initialize \
   --admin "$ADMIN_PUBLIC_KEY" \
-  --reflector_address "$ADMIN_PUBLIC_KEY"
+  --reflector_address "${REFLECTOR_CONTRACT_ID:-$ADMIN_PUBLIC_KEY}"
+
+run_tx "set oracle mode" \
+  stellar contract invoke --id "$PRICE_ORACLE_CONTRACT_ID" --source-account "$SOURCE_ACCOUNT" --network testnet --send=yes -- set_oracle_mode \
+  --mode "$ORACLE_MODE"
+
+run_tx "set oracle staleness" \
+  stellar contract invoke --id "$PRICE_ORACLE_CONTRACT_ID" --source-account "$SOURCE_ACCOUNT" --network testnet --send=yes -- set_max_price_staleness_ledgers \
+  --max_staleness_ledgers "$MAX_PRICE_STALENESS_LEDGERS"
+
+if [ "$ORACLE_MODE" = "reflector" ]; then
+  run_tx "map XLM Reflector asset" \
+    stellar contract invoke --id "$PRICE_ORACLE_CONTRACT_ID" --source-account "$SOURCE_ACCOUNT" --network testnet --send=yes -- set_reflector_stellar_asset \
+    --asset "$XLM_ASSET_CONTRACT_ID" \
+    --stellar_asset "$XLM_ASSET_CONTRACT_ID"
+fi
 
 run_tx "initialize lending pool" \
   stellar contract invoke --id "$LENDING_POOL_CONTRACT_ID" --source-account "$SOURCE_ACCOUNT" --network testnet --send=yes -- initialize \
@@ -131,10 +160,13 @@ run_tx "add XLM reserve" \
   --config-file-path "$TMP_DIR/reserve-config.json" \
   --rate_config-file-path "$TMP_DIR/rate-config.json"
 
-run_tx "set XLM oracle price" \
-  stellar contract invoke --id "$PRICE_ORACLE_CONTRACT_ID" --source-account "$SOURCE_ACCOUNT" --network testnet --send=yes -- set_price \
-  --asset "$XLM_ASSET_CONTRACT_ID" \
-  --price_wad 150000000000000000
+if [ "$ORACLE_MODE" = "manual" ]; then
+  echo "WARNING: ORACLE_MODE=manual is intended for local tests only, not the Testnet demo."
+  run_tx "set manual XLM oracle price" \
+    stellar contract invoke --id "$PRICE_ORACLE_CONTRACT_ID" --source-account "$SOURCE_ACCOUNT" --network testnet --send=yes -- set_price \
+    --asset "$XLM_ASSET_CONTRACT_ID" \
+    --price_wad "${MANUAL_XLM_PRICE_WAD:-150000000000000000}"
+fi
 
 echo
 echo "Initialization complete. Full CLI output: $INIT_LOG"

@@ -68,20 +68,19 @@ Tracks price feed health for reserve assets.
 ```mermaid
 stateDiagram-v2
     [*] --> Healthy
-    Healthy --> Stale : Timestamp > Staleness Window (3600s)
-    Healthy --> Deviated : Feed Deviation > 2%
+    Healthy --> Stale : Timestamp > MAX_PRICE_STALENESS_LEDGERS
+    Healthy --> Deviated : Movement > configured deviation threshold
     Stale --> Healthy : Feed Update Received
-    Deviated --> Stale : Feed Update Received (Stale data check)
-    Stale --> Frozen : Circuit Breaker Triggered (Lag/Errors)
-    Deviated --> Frozen : Circuit Breaker Triggered
-    Frozen --> Failed : Primary and Secondary Feeds Unusable
+    Deviated --> Healthy : Accepted price received
+    Stale --> Failed : Price read rejected
+    Deviated --> Failed : Price read rejected
     Failed --> [*]
 ```
 
 ### Transition Specifications:
-- **`Healthy -> Stale`**: Triggered when `current_time - price_timestamp > 3600 seconds`. Reverts transactions using this price feed unless a fallback is configured.
-- **`Healthy -> Deviated`**: Triggered when the price difference between primary and secondary feeds exceeds 2%. The aggregator falls back to secondary feeds or TWAP pricing.
-- **`Stale/Deviated -> Frozen`**: Triggered when both feeds fail or deviate significantly. The aggregator freezes the asset price at the last valid value and pauses borrowing/withdrawals.
+- **`Healthy -> Stale`**: Triggered when oracle timestamp exceeds the configured staleness window. Transactions using the price revert.
+- **`Healthy -> Deviated`**: Triggered when the latest accepted price movement exceeds the configured threshold.
+- **`Stale/Deviated -> Failed`**: The adapter fails closed; it does not silently freeze or fallback to a fake price.
 
 ---
 

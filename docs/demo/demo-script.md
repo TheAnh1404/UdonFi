@@ -10,7 +10,7 @@
    cargo test
    ```
 
-2. Create `contracts/.env` from `contracts/.env.example` and set `DEPLOYER_SECRET_KEY`.
+2. Create `contracts/.env` from `contracts/.env.example`, set `DEPLOYER_SECRET_KEY`, set `ORACLE_MODE=reflector`, and set `REFLECTOR_CONTRACT_ID` to the Testnet Reflector/SEP-40-compatible oracle contract.
 
 3. Deploy and initialize Testnet contracts:
 
@@ -21,7 +21,10 @@
    bash scripts/verify-testnet.sh
    ```
 
-4. Confirm `frontend/.env.local` was generated with Testnet contract IDs.
+4. Confirm `frontend/.env.local` was generated with Testnet contract IDs and oracle values:
+   - `VITE_ORACLE_MODE=reflector`
+   - `VITE_REFLECTOR_CONTRACT_ID`
+   - `VITE_MAX_PRICE_STALENESS_LEDGERS`
 
 5. Start the frontend:
 
@@ -47,7 +50,7 @@
 
 7. Borrow XLM against the collateral.
 
-8. Refresh and show the Health Factor card.
+8. Refresh and show the oracle status strip and Health Factor card. Explain that XLM/USD is read from the price oracle contract and Health Factor is read from `lending_pool.get_health_factor`.
 
 9. Repay XLM debt.
 
@@ -59,10 +62,11 @@
     - Execute liquidation with the returned session ID.
     - Open both submitted transactions on Stellar Expert.
 
-12. Explain post-MVP features:
+12. Explain scope:
     - No off-chain automation service.
     - No off-chain analytics service.
-    - No production oracle aggregation.
+    - Reflector is the intended Testnet/demo price source.
+    - Manual oracle mode is local-test only.
     - Testnet/demo only, not mainnet-ready.
 
 ## Expected Demo Signals
@@ -72,4 +76,4 @@
 - Each action shows transaction phases from idle through success or error.
 - Successful actions display a transaction hash.
 - Transaction hashes link to Stellar Expert Testnet.
-- User deposit, debt, reserve count, and health factor refresh after transactions.
+- XLM/USD oracle status, user deposit, debt, reserve count, and Health Factor refresh after transactions.

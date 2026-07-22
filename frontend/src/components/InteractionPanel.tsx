@@ -7,6 +7,14 @@ type ActionType = 'SUPPLY' | 'WITHDRAW' | 'BORROW' | 'REPAY' | 'LEVERAGE';
 interface InteractionPanelProps {
     reserves: Record<'XLM' | 'USDC', Reserve>;
     userBalances: UserBalances;
+    contractAccountData?: {
+        totalCollateralUsd: number;
+        totalDebtUsd: number;
+        availableBorrowUsd: number;
+        healthFactor: number;
+        currentLtv: number;
+        source: 'contract' | 'unavailable';
+    };
     activeAction: ActionType;
     activeAsset: 'XLM' | 'USDC';
     onClose: () => void;
@@ -23,6 +31,7 @@ interface InteractionPanelProps {
 export const InteractionPanel: React.FC<InteractionPanelProps> = ({
     reserves,
     userBalances,
+    contractAccountData,
     activeAction,
     activeAsset: propAsset,
     onClose,
@@ -88,11 +97,14 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
     const isXlmCollateral = ((userBalances.bitmap & 1n) === 1n);
     const isUsdcCollateral = ((userBalances.bitmap & 4n) === 4n);
 
-    // Initial calculations
-    const initialCollateralValue = (isXlmCollateral ? currentXlmSuppliedValue : 0) + (isUsdcCollateral ? currentUsdcSuppliedValue : 0);
-    const initialDebtValue = currentXlmDebtValue + currentUsdcDebtValue;
-    const initialHealthFactor = initialDebtValue > 0 ? (initialCollateralValue * 0.825) / initialDebtValue : Infinity;
-    const initialLtv = initialCollateralValue > 0 ? (initialDebtValue / initialCollateralValue) * 100 : 0;
+    // Initial account state comes from LendingPool when available.
+    const localCollateralValue = (isXlmCollateral ? currentXlmSuppliedValue : 0) + (isUsdcCollateral ? currentUsdcSuppliedValue : 0);
+    const localDebtValue = currentXlmDebtValue + currentUsdcDebtValue;
+    const hasContractData = contractAccountData?.source === 'contract';
+    const initialCollateralValue = hasContractData ? contractAccountData.totalCollateralUsd : localCollateralValue;
+    const initialDebtValue = hasContractData ? contractAccountData.totalDebtUsd : localDebtValue;
+    const initialHealthFactor = hasContractData ? contractAccountData.healthFactor : Infinity;
+    const initialLtv = hasContractData ? contractAccountData.currentLtv : (initialCollateralValue > 0 ? (initialDebtValue / initialCollateralValue) * 100 : 0);
 
     // Smart Wizard Activation check
     // If user goes to borrow but has no collateral active
@@ -122,8 +134,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
         referenceBalance = asset === 'XLM' ? currentXlmSupplied : currentUsdcSupplied;
         balanceLabel = 'Đã nạp';
     } else if (action === 'BORROW') {
-        // Max borrowable = (Collateral * 0.70) - Debt
-        const maxBorrowableUsd = Math.max(0, (initialCollateralValue * 0.70) - initialDebtValue);
+        const maxBorrowableUsd = hasContractData ? contractAccountData.availableBorrowUsd : Math.max(0, (initialCollateralValue * 0.70) - initialDebtValue);
         referenceBalance = maxBorrowableUsd / reserve.price;
         balanceLabel = 'Hạn mức vay';
     } else if (action === 'REPAY') {
@@ -156,7 +167,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
 
     if (amount > 0) {
         if (isLeverageMode) {
-            // Leverage Loop simulation
+            // Leverage Loop estimate
             const leveragedSupply = amount * leverageFactor;
             const leveragedDebt = amount * (leverageFactor - 1) * reserves.XLM.price;
             
@@ -187,7 +198,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
 
     // Advanced dynamic liquidation price calculator
     const getLiquidationPriceInfo = () => {
-        // We calculate XLM liquidation price based on simulated position
+        // Estimate XLM liquidation price for the pending input.
         // Liquidation occurs when HF = 1.0 -> ((Collateral_XLM * P + Collateral_USDC) * 0.825) / (Debt_XLM * P + Debt_USDC) = 1.0
         
         let simXlmCollateralAmount = currentXlmSupplied;
@@ -797,7 +808,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
 
                             {/* Simulation summary */}
                             <div className="simulation-box" style={{ marginBottom: '1rem' }}>
-                                <h4>Mô Phỏng Đòn Bẩy Tài Khoản</h4>
+                                <h4>Ước Tính Đòn Bẩy Tài Khoản</h4>
                                 <div className="sim-row">
                                     <span>Hệ số Sức Khỏe HF:</span>
                                     <strong className={simHealthFactor > 1.5 ? "text-green" : simHealthFactor >= 1.0 ? "text-yellow" : "text-red animate-pulse"}>
@@ -916,7 +927,7 @@ export const InteractionPanel: React.FC<InteractionPanelProps> = ({
 
                             {/* Simulation results box */}
                             <div className="simulation-box">
-                                <h4>Mô Phỏng Trạng Thái Vị Thế</h4>
+                                <h4>Ước Tính Trạng Thái Vị Thế</h4>
                                 <div className="sim-row">
                                     <span>Thế Chấp (Collateral):</span>
                                     <span>

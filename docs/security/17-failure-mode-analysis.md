@@ -71,9 +71,9 @@ For the current MVP, this active document covers contract, oracle, governance, a
 ### FMA-ORC-01: Stale Oracle Prices
 - **Description**: The oracle price feed stops updating, reporting outdated asset prices.
 - **Impact**: Users borrow against overvalued collateral, or liquidators seize undervalued assets.
-- **Detection Method**: Aggregator checks price timestamps and flags prices older than 3600 seconds.
-- **Mitigation**: Aggregator reverts if price timestamp is stale.
-- **Recovery Plan**: Switch to secondary feed or activate circuit breaker to freeze prices.
+- **Detection Method**: `price_oracle` checks oracle timestamps against `MAX_PRICE_STALENESS_LEDGERS`.
+- **Mitigation**: `price_oracle` reverts if price data is stale.
+- **Recovery Plan**: Reconfigure the Reflector contract/address or pause affected operations until the feed is healthy.
 - **Severity**: High
 
 ### FMA-ORC-02: Price Feed Deviation
@@ -81,7 +81,7 @@ For the current MVP, this active document covers contract, oracle, governance, a
 - **Impact**: Risk engine calculations are distorted.
 - **Detection Method**: Price difference checks exceed the 2% deviation threshold.
 - **Mitigation**: Aggregator rejects updates when deviation is exceeded.
-- **Recovery Plan**: Fallback to TWAP pricing or freeze prices and pause operations.
+- **Recovery Plan**: Pause affected operations and reconfigure oracle parameters after review.
 - **Severity**: High
 
 ### FMA-ORC-03: Oracle Feed Outage (Unavailable)
@@ -96,7 +96,7 @@ For the current MVP, this active document covers contract, oracle, governance, a
 - **Description**: Attackers manipulate on-chain price feeds using flash loans.
 - **Impact**: Vaults are liquidated incorrectly, or the pool is drained.
 - **Detection Method**: Sharp price fluctuations within a single block.
-- **Mitigation**: Do not use DEX pool spot prices. Use decentralized oracle aggregates (Pyth, Band).
+- **Mitigation**: Do not use frontend API prices or DEX pool spot prices. Use the Reflector/SEP-40 oracle adapter.
 - **Recovery Plan**: Upgrade feeds and pause reserves during active attacks.
 - **Severity**: Critical
 

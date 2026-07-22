@@ -17,7 +17,7 @@ const eventChannel = typeof window !== 'undefined' ? new BroadcastChannel('udonf
 
 // Web3 Integration Imports
 import * as StellarSdk from '@stellar/stellar-sdk';
-import { isConnected, setAllowed, getAddress, signTransaction } from '@stellar/freighter-api';
+import { connectStellarWallet, signSorobanTx } from './services/walletKit';
 import { io } from 'socket.io-client';
 
 const generateMockHash = () => {
@@ -487,35 +487,25 @@ function App() {
         }
     };
 
-    // Real Freighter connect and RPC query integration
+    // Real Freighter & StellarWalletsKit connect and RPC query integration
     const handleConnectWallet = async () => {
         try {
-            const connected = await isConnected();
-            if (!connected) {
-                addLog('ERROR', 'Không tìm thấy ví Freighter. Vui lòng cài đặt Freighter extension.');
-                return;
-            }
-            
-            // Yêu cầu quyền truy cập từ ví Freighter (setAllowed sẽ kích hoạt popup)
-            addLog('INFO', 'Đang yêu cầu kết nối với ví Freighter của bạn...');
-            await setAllowed();
-            
-            // Lấy địa chỉ ví đã kết nối bằng getAddress
-            const addressResponse = await getAddress();
-            const address = typeof addressResponse === 'string' ? addressResponse : addressResponse?.address;
+            addLog('INFO', 'Đang kích hoạt quy trình kết nối ví (Freighter / StellarWalletsKit)...');
+            const connection = await connectStellarWallet();
+            const address = connection.publicKey;
             
             if (!address) {
-                addLog('ERROR', 'Không lấy được địa chỉ ví. Vui lòng mở khóa ví Freighter.');
+                addLog('ERROR', 'Không lấy được địa chỉ ví. Vui lòng phê duyệt quyền kết nối ví.');
                 return;
             }
             
             setWallet({ isConnected: true, address });
-            addLog('SYSTEM', 'Đã kết nối Ví Freighter thật. Địa chỉ ví: ' + address.slice(0, 8) + '...' + address.slice(-8));
+            addLog('SYSTEM', `Đã kết nối Ví Stellar thành công (${connection.walletType.toUpperCase()}). Địa chỉ ví: ${address.slice(0, 8)}...${address.slice(-8)}`);
             
-            // Sync states from RPC
+            // Sync states from Soroban RPC
             await fetchUserBalancesAndContractState(address);
         } catch (err: any) {
-            addLog('ERROR', `Lỗi kết nối ví Freighter: ${err.message || err}`);
+            addLog('ERROR', `Lỗi kết nối ví Stellar: ${err.message || err}`);
         }
     };
 
@@ -1030,22 +1020,15 @@ function App() {
             }
 
             setTxState('SIGNING');
-
-            addLog('EVENT', 'Đang mở ví Freighter yêu cầu người dùng KÝ giao dịch...');
-            const xdrSigned = await signTransaction(tx.toXDR(), {
-                networkPassphrase: StellarSdk.Networks.TESTNET,
-                address: userAddress
-            });
-
-            const signedXdr = typeof xdrSigned === 'string' ? xdrSigned : (xdrSigned as any)?.signedTxXdr;
-            const signError = (xdrSigned as any)?.error;
-
-            if (signError) {
-                throw new Error(`Ví Freighter từ chối ký: ${signError}`);
-            }
+            addLog('EVENT', 'Đang mở ví (Freighter / StellarWalletsKit) yêu cầu ký giao dịch...');
+            const signedXdr = await signSorobanTx(
+                tx.toXDR(),
+                StellarSdk.Networks.TESTNET,
+                userAddress
+            );
 
             if (!signedXdr) {
-                throw new Error('Không nhận được giao dịch đã ký từ Freighter.');
+                throw new Error('Không nhận được giao dịch đã ký từ ví Stellar.');
             }
 
             setTxState('SUBMITTING');
@@ -1271,18 +1254,15 @@ function App() {
             localSequenceRef.current = sourceAccount.sequenceNumber();
 
             setTxState('SIGNING');
-            addLog('EVENT', 'Đang mở ví Freighter yêu cầu ký duyệt Trustline USDC...');
+            addLog('EVENT', 'Đang mở ví (Freighter / StellarWalletsKit) yêu cầu ký duyệt Trustline USDC...');
             
-            const xdrSigned = await signTransaction(tx.toXDR(), {
-                networkPassphrase: StellarSdk.Networks.TESTNET,
-                address: wallet.address
-            });
+            const signedXdr = await signSorobanTx(
+                tx.toXDR(),
+                StellarSdk.Networks.TESTNET,
+                wallet.address
+            );
 
-            const signedXdr = typeof xdrSigned === 'string' ? xdrSigned : (xdrSigned as any)?.signedTxXdr;
-            const signError = (xdrSigned as any)?.error;
-
-            if (signError) throw new Error(`Ví Freighter từ chối ký: ${signError}`);
-            if (!signedXdr) throw new Error('Không nhận được giao dịch đã ký từ Freighter.');
+            if (!signedXdr) throw new Error('Không nhận được giao dịch đã ký từ ví Stellar.');
 
             setTxState('SUBMITTING');
             addLog('INFO', 'Đang phát giao dịch Trustline lên Stellar ledger...');

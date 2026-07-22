@@ -1,6 +1,23 @@
 {
+  "name": "udonfi-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "UdonFi - DeFI Lending & Borrowing Protocol on Stellar Soroban",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "lint": "npm --prefix frontend run lint",
+    "build:contracts": "cd contracts && cargo build --target wasm32v1-none --release",
+    "test:contracts": "cd contracts && cargo test"
+  },
   "dependencies": {
+    "@stellar/freighter-api": "^6.0.1",
+    "@stellar/stellar-sdk": "^15.1.0",
+    "@creabt/stellar-wallets-kit": "^1.1.0",
     "firebase": "^12.13.0",
-    "lucide-react": "^1.16.0"
+    "lucide-react": "^0.468.0"
   }
 }

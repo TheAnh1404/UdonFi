@@ -99,61 +99,62 @@ impl LiquidationContract {
             .get(&LiquidationDataKey::Pool)
             .expect("not initialized");
 
-        // Try to query Health Factor from pool to verify borrower is eligible for liquidation
+        // Query Health Factor from pool to verify borrower is eligible for liquidation.
         let hf_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
             &pool,
             &soroban_sdk::Symbol::new(&env, "get_health_factor"),
             soroban_sdk::vec![&env, borrower.clone().into_val(&env)],
         );
 
-        if let Ok(Ok(hf)) = hf_res {
-            if hf >= HEALTH_FACTOR_LIQUIDATION_THRESHOLD {
-                panic!("borrower not liquidatable");
-            }
+        match hf_res {
+            Ok(Ok(hf)) if hf < HEALTH_FACTOR_LIQUIDATION_THRESHOLD => {}
+            Ok(Ok(_)) => panic!("borrower not liquidatable"),
+            _ => panic!("health factor unavailable"),
         }
 
-        // Try to get reserve config for the actual liquidation bonus
-        let mut liquidation_bonus: u32 = 500; // default 5% fallback
+        // Get reserve config for the actual liquidation bonus.
         let reserve_res = env.try_invoke_contract::<ReserveConfig, soroban_sdk::Error>(
             &pool,
             &soroban_sdk::Symbol::new(&env, "get_reserve_info"),
             soroban_sdk::vec![&env, collateral_asset.clone().into_val(&env)],
         );
-        if let Ok(Ok(config)) = reserve_res {
-            liquidation_bonus = config.liquidation_bonus;
-        }
+        let liquidation_bonus = match reserve_res {
+            Ok(Ok(config)) => config.liquidation_bonus,
+            _ => panic!("reserve config unavailable"),
+        };
 
         let bonus_factor = WAD + percent_to_wad(liquidation_bonus);
 
-        // Fetch prices from Price Oracle adapter via the address registered in the LendingPool
-        let mut debt_price = WAD;
-        let mut collateral_price = WAD;
-
+        // Fetch prices from Price Oracle adapter via the address registered in the LendingPool.
         let oracle_res = env.try_invoke_contract::<Address, soroban_sdk::Error>(
             &pool,
             &soroban_sdk::Symbol::new(&env, "oracle"),
             soroban_sdk::vec![&env],
         );
+        let oracle = match oracle_res {
+            Ok(Ok(oracle)) => oracle,
+            _ => panic!("oracle unavailable"),
+        };
 
-        if let Ok(Ok(oracle)) = oracle_res {
-            let debt_price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
-                &oracle,
-                &soroban_sdk::Symbol::new(&env, "get_price_usd"),
-                soroban_sdk::vec![&env, debt_asset.clone().into_val(&env)],
-            );
-            if let Ok(Ok(p)) = debt_price_res {
-                debt_price = p;
-            }
+        let debt_price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
+            &oracle,
+            &soroban_sdk::Symbol::new(&env, "get_price_wad"),
+            soroban_sdk::vec![&env, debt_asset.clone().into_val(&env)],
+        );
+        let debt_price = match debt_price_res {
+            Ok(Ok(price)) if price > 0 => price,
+            _ => panic!("oracle debt price unavailable"),
+        };
 
-            let collateral_price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
-                &oracle,
-                &soroban_sdk::Symbol::new(&env, "get_price_usd"),
-                soroban_sdk::vec![&env, collateral_asset.clone().into_val(&env)],
-            );
-            if let Ok(Ok(p)) = collateral_price_res {
-                collateral_price = p;
-            }
-        }
+        let collateral_price_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
+            &oracle,
+            &soroban_sdk::Symbol::new(&env, "get_price_wad"),
+            soroban_sdk::vec![&env, collateral_asset.clone().into_val(&env)],
+        );
+        let collateral_price = match collateral_price_res {
+            Ok(Ok(price)) if price > 0 => price,
+            _ => panic!("oracle collateral price unavailable"),
+        };
 
         // Fetch borrower's actual collateral balance from pool to apply proportional capping
         let collateral_balance_res = env.try_invoke_contract::<i128, soroban_sdk::Error>(
@@ -165,10 +166,10 @@ impl LiquidationContract {
                 collateral_asset.clone().into_val(&env),
             ],
         );
-        let mut collateral_balance = 0i128;
-        if let Ok(Ok(bal)) = collateral_balance_res {
-            collateral_balance = bal;
-        }
+        let collateral_balance = match collateral_balance_res {
+            Ok(Ok(balance)) => balance,
+            _ => panic!("collateral balance unavailable"),
+        };
 
         let debt_value = wad_mul(debt_to_cover, debt_price).expect("overflow");
         let seized_value = wad_mul(debt_value, bonus_factor).expect("overflow");
@@ -337,7 +338,6 @@ impl LiquidationContract {
     /// Check if a borrower is eligible for liquidation.
     /// Returns true if Health Factor < 1.0.
     ///
-    /// In production, this would call pool.get_health_factor(borrower).
     pub fn is_liquidatable(env: Env, borrower: Address) -> bool {
         let pool_res = env
             .storage()
@@ -363,10 +363,26 @@ mod test {
     use soroban_sdk::{contract, contractimpl, testutils::Address as _, Env};
 
     #[contract]
+    pub struct MockOracleContract;
+
+    #[contractimpl]
+    impl MockOracleContract {
+        pub fn get_price_wad(_env: Env, _asset: Address) -> i128 {
+            WAD
+        }
+    }
+
+    #[contract]
     pub struct MockPoolContract;
 
     #[contractimpl]
     impl MockPoolContract {
+        pub fn initialize(env: Env, oracle: Address) {
+            env.storage()
+                .instance()
+                .set(&symbol_short!("oracle"), &oracle);
+        }
+
         pub fn get_health_factor(_env: Env, _user: Address) -> i128 {
             WAD / 2 // 0.5 (under 1.0)
         }
@@ -386,7 +402,10 @@ mod test {
             }
         }
         pub fn oracle(env: Env) -> Address {
-            Address::generate(&env)
+            env.storage()
+                .instance()
+                .get(&symbol_short!("oracle"))
+                .unwrap()
         }
         pub fn get_user_deposit(_env: Env, _user: Address, _asset: Address) -> i128 {
             100_000
@@ -428,7 +447,10 @@ mod test {
         let client = LiquidationContractClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
+        let oracle = env.register(MockOracleContract, ());
         let pool = env.register(MockPoolContract, ());
+        let pool_client = MockPoolContractClient::new(&env, &pool);
+        pool_client.initialize(&oracle);
         let liquidator = Address::generate(&env);
         let borrower = Address::generate(&env);
         let debt_asset = Address::generate(&env);
@@ -469,7 +491,10 @@ mod test {
         let contract_id = env.register(LiquidationContract, ());
         let client = LiquidationContractClient::new(&env, &contract_id);
 
+        let oracle = env.register(MockOracleContract, ());
         let pool = env.register(MockPoolContract, ());
+        let pool_client = MockPoolContractClient::new(&env, &pool);
+        pool_client.initialize(&oracle);
         let liquidator = Address::generate(&env);
         let borrower = Address::generate(&env);
         let collateral_asset = Address::generate(&env);

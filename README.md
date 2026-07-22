@@ -6,7 +6,7 @@ The project is demo/testnet only. It is not mainnet-ready.
 
 ## MVP Status
 
-- Smart contract MVP: initialize, reserve creation, deposit, withdraw, borrow, repay, interest, health factor, and manual liquidation.
+- Smart contract MVP: initialize, reserve creation, deposit, withdraw, borrow, repay, interest, oracle-based health factor, and manual liquidation.
 - Deployment preparation: Testnet deploy, initialize, and verify scripts under `contracts/scripts/`.
 - Frontend MVP: Freighter connection, contract ID environment loading, Soroban RPC transaction submission, transaction hash display, and Stellar Expert links.
 
@@ -14,7 +14,7 @@ Out of scope for this MVP:
 
 - Off-chain automation services.
 - Off-chain analytics services.
-- Production oracle aggregation.
+- Mainnet oracle operations and governance.
 - Governance.
 - Mainnet deployment.
 
@@ -56,6 +56,10 @@ DEBT_TOKEN_CONTRACT_ID
 RESERVE_CONTRACT_ID
 PRICE_ORACLE_CONTRACT_ID
 LIQUIDATION_CONTRACT_ID
+ORACLE_MODE
+REFLECTOR_CONTRACT_ID
+MAX_PRICE_STALENESS_LEDGERS
+XLM_ASSET_CONTRACT_ID
 STELLAR_EXPERT_BASE_URL
 ```
 
@@ -97,7 +101,7 @@ It writes:
 - `contracts/.env.local`
 - `frontend/.env.local`
 
-`init-testnet.sh` initializes the oracle, pool, liquidation engine, XLM aToken, XLM debtToken, XLM reserve, and initial XLM demo price.
+`init-testnet.sh` initializes the oracle, pool, liquidation engine, XLM aToken, XLM debtToken, and XLM reserve. For Testnet/demo, `ORACLE_MODE=reflector` is the intended mode and `REFLECTOR_CONTRACT_ID` must point to the deployed Reflector/SEP-40-compatible oracle. Manual oracle mode is only for local contract tests.
 
 `verify-testnet.sh` reads contract state to confirm the pool, oracle, reserve, and liquidation engine are callable.
 
@@ -111,7 +115,7 @@ npm run build
 npm run lint
 ```
 
-The frontend reads contract IDs from `frontend/.env.local`, connects to Freighter, builds Soroban transactions through RPC, signs through Freighter, submits to Testnet, polls confirmation, and renders Stellar Expert transaction links.
+The frontend reads contract IDs and oracle configuration from `frontend/.env.local`, connects to Freighter, reads XLM/USD from the price oracle contract, reads Health Factor from the lending pool, builds Soroban transactions through RPC, signs through Freighter, submits to Testnet, polls confirmation, and renders Stellar Expert transaction links.
 
 ## Stellar Expert Verification
 
@@ -145,7 +149,7 @@ Short flow:
 4. Deposit XLM.
 5. Open the transaction on Stellar Expert.
 6. Borrow XLM.
-7. Show Health Factor.
+7. Show XLM/USD oracle status and contract Health Factor.
 8. Repay.
 9. Withdraw.
 10. Optionally prepare and execute manual liquidation.
@@ -154,7 +158,7 @@ Short flow:
 
 - No off-chain automation service.
 - No off-chain analytics service.
-- No production oracle aggregation.
+- Reflector/SEP-40 oracle contract ID must be configured for Testnet demos.
 - Not mainnet-ready.
 - Demo/testnet only.
 - The default deployment initialization configures a single XLM reserve for the MVP path.

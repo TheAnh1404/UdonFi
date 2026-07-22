@@ -157,39 +157,39 @@ This document defines the core safety invariants of the UdonFi V2 protocol. Thes
 ## 4. Oracle Invariants (INV-ORC-001 to INV-ORC-006)
 
 ### INV-ORC-001: Price Freshness Invariant
-- **Description**: Prices used for calculations must not be older than the configured staleness window (e.g. 3600 seconds).
-- **Applies to**: `price_oracle_aggregator`.
+- **Description**: Prices used for calculations must not exceed `MAX_PRICE_STALENESS_LEDGERS`.
+- **Applies to**: `price_oracle`.
 - **How to test**: Revert when attempting to read price from feed with outdated timestamp.
 - **Severity**: High
 
 ### INV-ORC-002: Deviation Limit check
-- **Description**: Price difference between primary and secondary feeds must be within the deviation threshold (2%).
-- **Applies to**: `price_oracle_aggregator`.
-- **How to test**: Use test primary/secondary price feeds with 5% deviation; assert get_price reverts.
+- **Description**: Price movement from the last accepted price must be within the configured deviation threshold.
+- **Applies to**: `price_oracle`.
+- **How to test**: Change oracle price beyond the deviation threshold and assert `get_price_wad` reverts.
 - **Severity**: High
 
 ### INV-ORC-003: Non-Zero Price Invariant
-- **Description**: Price returned by the oracle aggregator must be strictly greater than 0.
-- **Applies to**: `price_oracle_aggregator`.
-- **How to test**: If oracle returns 0 or negative price, verify aggregator reverts.
+- **Description**: Price returned by the oracle adapter must be strictly greater than 0.
+- **Applies to**: `price_oracle`.
+- **How to test**: If oracle returns 0 or negative price, verify adapter reverts.
 - **Severity**: Critical
 
 ### INV-ORC-004: Timestamp Invariant
 - **Description**: Oracle timestamp must not be in the future: `timestamp <= current_block_timestamp`.
-- **Applies to**: `price_oracle_aggregator`.
+- **Applies to**: `price_oracle`.
 - **How to test**: Revert if oracle feed reports a timestamp in the future.
 - **Severity**: Medium
 
-### INV-ORC-005: Price Freeze Invariant
-- **Description**: During active circuit breaker states, prices are frozen and cannot change.
-- **Applies to**: `price_oracle_aggregator`.
-- **How to test**: Trigger circuit breaker and query price twice with changing feed inputs; assert returned price remains identical.
+### INV-ORC-005: Manual Mode Isolation
+- **Description**: Admin `set_price` is only allowed when oracle mode is `manual`.
+- **Applies to**: `price_oracle`.
+- **How to test**: Assert `set_price` reverts in `reflector` mode.
 - **Severity**: High
 
-### INV-ORC-006: Fallback Trigger Invariant
-- **Description**: If primary oracle fails, aggregator must switch to the fallback oracle.
-- **Applies to**: `price_oracle_aggregator`.
-- **How to test**: Simulate primary oracle outage; verify that aggregator returns price from secondary feed.
+### INV-ORC-006: No Silent Fallback Invariant
+- **Description**: If Reflector price is unavailable, stale, or invalid, risk-sensitive reads must revert rather than falling back to a fake price.
+- **Applies to**: `price_oracle`, `lending_pool`, `liquidation`.
+- **How to test**: Simulate oracle outage and verify Health Factor / liquidation preparation fails closed.
 - **Severity**: High
 
 ---

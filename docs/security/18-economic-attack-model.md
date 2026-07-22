@@ -13,7 +13,7 @@ This document outlines potential economic attack vectors against the UdonFi V2 p
   3. Let the loan default, leaving the protocol with overvalued, illiquid collateral.
 - **Attacker Benefit**: Drains high-value assets from the protocol.
 - **Protocol Impact**: Solvency loss and bad debt accumulation.
-- **Existing Mitigations**: Do not use AMM spot pricing. Rely on Pyth and Band oracle price feeds.
+- **Existing Mitigations**: Do not use AMM spot pricing. Read prices through the Reflector/SEP-40 oracle adapter.
 - **Missing Mitigations**: Implement maximum borrowing limits relative to pool liquidity.
 - **Test Cases Required**: `test_oracle_manipulation_reversion`
 
@@ -102,7 +102,7 @@ This document outlines potential economic attack vectors against the UdonFi V2 p
   3. Restore the price feed to its normal value, pocketing the liquidation bonus.
 - **Attacker Benefit**: Seizes user collateral at a discount.
 - **Protocol Impact**: Users lose funds unjustly, undermining trust.
-- **Existing Mitigations**: Use oracle aggregators with price deviation checks and TWAP pricing.
+- **Existing Mitigations**: Use the Reflector/SEP-40 oracle adapter with stale, invalid, and deviation checks.
 - **Missing Mitigations**: Require the price to remain below the liquidation threshold for a minimum duration before allowing liquidation.
 - **Test Cases Required**: `test_liquidation_sandwich_prevention`
 
@@ -189,7 +189,7 @@ This document outlines potential economic attack vectors against the UdonFi V2 p
   2. Borrow assets using the inflated price feed before the aggregator syncs or reverts.
 - **Attacker Benefit**: Borrows assets at an undervalued rate.
 - **Protocol Impact**: Solvency loss and incorrect liquidations.
-- **Existing Mitigations**: Aggregator rejects updates when price deviation exceeds 2%.
+- **Existing Mitigations**: Oracle adapter rejects updates when price deviation exceeds the configured threshold.
 - **Missing Mitigations**: Implement dynamic price deviation thresholds that scale with asset volatility.
 - **Test Cases Required**: `test_deviation_limit_gating`
 

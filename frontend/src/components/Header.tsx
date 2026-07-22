@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Wallet, LogOut, LayoutDashboard, Database, Coins, Zap, Bell, Trash2, RefreshCw } from 'lucide-react';
+import { Wallet, LogOut, LayoutDashboard, Database, Coins, Bell, Trash2, RefreshCw } from 'lucide-react';
 import type { Reserve } from '../types/lending';
 
 interface HeaderProps {
@@ -164,31 +164,6 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                         <Database size={13} />
                         <span>UdonFi Pools</span>
-                    </button>
-                    
-                    <button 
-                        onClick={() => onNavigate('SIMULATOR')}
-                        className="nav-btn simulator-nav-btn"
-                        style={{
-                            background: currentView === 'SIMULATOR' ? 'rgba(255, 145, 0, 0.12)' : 'transparent',
-                            border: '1px solid ' + (currentView === 'SIMULATOR' ? 'rgba(255, 145, 0, 0.3)' : 'rgba(255, 145, 0, 0.15)'),
-                            color: '#ff9100',
-                            padding: '0.45rem 1.15rem',
-                            borderRadius: '8px',
-                            fontSize: '0.85rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.45rem',
-                            transition: 'var(--transition-smooth)',
-                            boxShadow: currentView === 'SIMULATOR' ? '0 0 10px rgba(255, 145, 0, 0.2)' : 'none',
-                            textShadow: '0 0 8px rgba(255, 145, 0, 0.2)',
-                            whiteSpace: 'nowrap'
-                        }}
-                    >
-                        <Zap size={13} />
-                        <span>Trình Giả Lập</span>
                     </button>
                 </div>
             </div>
@@ -499,3 +474,4 @@ export const Header: React.FC<HeaderProps> = ({
         </header>
     );
 };
+

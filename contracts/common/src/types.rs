@@ -95,8 +95,12 @@ pub enum OracleDataKey {
     Admin,
     /// Reflector Oracle contract address
     ReflectorAddress,
+    /// Oracle mode: "reflector" for SEP-40 adapter, "manual" for local tests
+    OracleMode,
     /// Maximum allowed price age in ledgers
     MaxPriceAge,
+    /// Maximum allowed price staleness in ledgers
+    MaxPriceStalenessLedgers,
     /// Last known price for circuit breaker
     LastPrice(Address),
     /// Maximum allowed price deviation percentage (basis points)

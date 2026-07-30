@@ -4,6 +4,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 [![React](https://img.shields.io/badge/React-19.0-blue.svg)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue.svg)](https://www.typescriptlang.org/)
+[![CI/CD Pipeline](https://github.com/TheAnh1404/UdonFi/actions/workflows/ci.yml/badge.svg)](https://github.com/TheAnh1404/UdonFi/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
 **UdonFi V2** is a decentralized, non-custodial money market protocol built on **Stellar Soroban**. It provides automated liquidity pools where users can supply collateralized digital assets (such as XLM and USDC) to earn yield, or borrow assets against their collateral positions. 
@@ -130,7 +131,11 @@ When $HF < 1.0$:
 
 ```text
 UdonFi/
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # Automated GitHub Actions CI/CD Pipeline (Rust + React)
 ├── contracts/                  # Soroban Smart Contract Rust Workspace
+│   ├── src/lib.rs              # Root workspace re-export entrypoint
 │   ├── lending_pool/           # Core supply, withdraw, borrow, repay, health factor logic
 │   ├── reserve/                # Asset risk parameter configurations & cap enforcement
 │   ├── price_oracle/           # Oracle wrapper with Reflector SEP-40 integration
@@ -138,16 +143,17 @@ UdonFi/
 │   ├── a_token/                # SEP-41 compliant interest-bearing token implementation
 │   ├── debt_token/             # Variable debt tracking token implementation
 │   ├── common/                 # Shared data structures, fixed-point math, interest models & errors
-│   ├── scripts/                # Testnet deployment bash scripts (deploy, init, verify)
 │   └── Cargo.toml              # Cargo workspace manifest
 ├── frontend/                   # React 19 + TypeScript + Vite Client
 │   ├── src/
-│   │   ├── components/         # Dashboard, Market tables, Gauges, Flow visualization, Simulators
-│   │   ├── services/           # Soroban RPC wrappers, Freighter API, WalletKit integration
-│   │   ├── pages/              # CreditMarket, Pools, Simulator views
+│   │   ├── soroban.ts          # Soroban RPC integration entrypoint
+│   │   ├── freighter.ts        # Freighter wallet connection entrypoint
+│   │   ├── contract.ts         # Contract invocation wrapper
+│   │   ├── components/         # Dashboard, Market tables, Gauges, Flow visualization
+│   │   ├── services/           # Underlying RPC, wallet, and contract helper implementations
 │   │   └── App.tsx             # Root application & state binding
-│   ├── package.json            # Frontend scripts & dependencies
-│   └── vite.config.ts          # Vite build configuration
+│   └── package.json            # Frontend scripts & dependencies
+├── src/                        # Root integration entrypoints (soroban.ts, freighter.ts, contract.ts)
 ├── deployments/                # Deployed contract address manifests (e.g., testnet.json)
 ├── docs/                       # Architecture, product specs, diagrams & demo guides
 ├── AGENTS.md                   # AI agent environment rules & instructions

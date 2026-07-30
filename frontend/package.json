@@ -13,7 +13,6 @@
     "@creabt/stellar-wallets-kit": "^1.1.0",
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^15.1.0",
-    "firebase": "^12.13.0",
     "lucide-react": "^0.468.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

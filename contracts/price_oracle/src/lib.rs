@@ -171,9 +171,10 @@ impl PriceOracleContract {
     /// Map a reserve asset to a SEP-40 oracle asset.
     pub fn set_reflector_asset(env: Env, asset: Address, oracle_asset: Asset) {
         Self::require_admin(&env);
-        env.storage()
-            .persistent()
-            .set(&LocalOracleKey::ReflectorAsset(asset.clone()), &oracle_asset);
+        env.storage().persistent().set(
+            &LocalOracleKey::ReflectorAsset(asset.clone()),
+            &oracle_asset,
+        );
         env.storage().persistent().extend_ttl(
             &LocalOracleKey::ReflectorAsset(asset),
             TTL_THRESHOLD,
@@ -237,7 +238,9 @@ impl PriceOracleContract {
         if mode != Self::reflector_mode(&env) && mode != Self::manual_mode(&env) {
             panic!("invalid oracle mode");
         }
-        env.storage().instance().set(&OracleDataKey::OracleMode, &mode);
+        env.storage()
+            .instance()
+            .set(&OracleDataKey::OracleMode, &mode);
     }
 
     /// Update maximum allowed price staleness in ledgers.
@@ -365,8 +368,7 @@ impl PriceOracleContract {
 
     fn is_reflector_stale(env: &Env, timestamp: u64) -> bool {
         let now = env.ledger().timestamp();
-        let max_age_seconds =
-            Self::max_staleness_ledgers(env) as u64 * ESTIMATED_LEDGER_SECONDS;
+        let max_age_seconds = Self::max_staleness_ledgers(env) as u64 * ESTIMATED_LEDGER_SECONDS;
         timestamp > now || now > timestamp.saturating_add(max_age_seconds)
     }
 
@@ -587,7 +589,8 @@ mod test {
 
         client.set_max_price_staleness_ledgers(&1);
         client.set_price(&asset, &WAD);
-        env.ledger().set_sequence_number(env.ledger().sequence() + 2);
+        env.ledger()
+            .set_sequence_number(env.ledger().sequence() + 2);
 
         client.get_price_wad(&asset);
     }
@@ -599,7 +602,8 @@ mod test {
 
         client.set_max_price_staleness_ledgers(&1);
         client.set_price(&asset, &WAD);
-        env.ledger().set_sequence_number(env.ledger().sequence() + 2);
+        env.ledger()
+            .set_sequence_number(env.ledger().sequence() + 2);
 
         let status = client.get_oracle_status(&asset);
         assert!(status.is_stale);

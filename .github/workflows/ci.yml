@@ -25,6 +25,11 @@ jobs:
         with:
           workspaces: contracts -> target
 
+      - name: Cargo Format Check
+        run: |
+          cd contracts
+          cargo fmt --all -- --check
+
       - name: Cargo Check
         run: |
           cd contracts
@@ -44,11 +49,6 @@ jobs:
         run: |
           cd contracts
           cargo clippy --all-targets -- -D warnings
-
-      - name: Cargo Format Check
-        run: |
-          cd contracts
-          cargo fmt --all -- --check
 
   frontend:
     name: Frontend CI (React TypeScript)
